@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kronkellijn Tool — Carmi</title>
+<style>
+  :root{
+    --paper: #FBF3E7;
+    --ink: #3A2B22;
+    --line: #D8C6AE;
+    --accent: #C05B3C;
+    --accent-soft: #E9C9B8;
+    --panel: #FFFDFA;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: 'Georgia', 'Iowan Old Style', serif;
+    background: var(--paper);
+    color: var(--ink);
+    display:flex;
+    min-height:100vh;
+  }
+  #sidebar{
+    width: 300px;
+    flex-shrink:0;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 22px 20px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+    overflow-y:auto;
+    height:100vh;
+    position:sticky;
+    top:0;
+  }
+  h1{
+    font-size: 19px;
+    margin: 0 0 2px 0;
+    letter-spacing: 0.3px;
+  }
+  .sub{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    color: #8a7862;
+    margin-bottom: 6px;
+    line-height:1.5;
+  }
+  section{
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  section:first-of-type{border-top:none; padding-top:0;}
+  label{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8a7862;
+    display:block;
+    margin-bottom: 8px;
+  }
+  button{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 9px 14px;
+    border-radius: 5px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button.secondary{
+    background: transparent;
+    color: var(--ink);
+  }
+  button.accent{
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  button:hover{ opacity:0.82; }
+  button:disabled{ opacity:0.35; cursor:default; }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .line-list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .line-item{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    padding: 7px 9px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor:pointer;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+  }
+  .line-item.active{ border-color: var(--accent); background: #FFF6EF; }
+  .swatch{
+    width:16px; height:16px; border-radius:50%; flex-shrink:0;
+    border: 1px solid rgba(0,0,0,0.15);
+  }
+  .line-item input[type=color]{
+    width:22px; height:22px; border:none; padding:0; background:none; cursor:pointer;
+  }
+  .line-item .del{
+    margin-left:auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    color: #b08a6f;
+    cursor:pointer;
+    background:none;
+    border:none;
+    padding: 0 4px;
+  }
+  .line-item .eyedrop{
+    margin-left:auto;
+    font-size: 13px;
+    background:none;
+    border:1px solid var(--line);
+    border-radius: 4px;
+    padding: 3px 6px;
+    cursor:pointer;
+    line-height:1;
+  }
+  .line-item .eyedrop.picking{
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  input[type=range]{ width:100%; }
+  input[type=color]{ width:36px; height:28px; border:1px solid var(--line); border-radius:4px; padding:0; cursor:pointer; background:none;}
+  .hint{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11.5px;
+    color: #a08d76;
+    line-height:1.5;
+    margin-top:6px;
+  }
+  #main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    padding: 30px;
+    gap: 16px;
+    overflow:auto;
+    min-width:0;
+  }
+  #canvasWrap{
+    position:relative;
+    box-shadow: 0 10px 40px rgba(58,43,34,0.18);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  canvas{ display:block; }
+  #overlay{
+    position:absolute;
+    top:0; left:0;
+    cursor: crosshair;
+  }
+  .mode-banner{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 8px 16px;
+    border-radius: 20px;
+  }
+  .mode-banner b{ color: var(--accent-soft); }
+  #fileInput{ display:none; }
+  .icon-list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .icon-item{
+    display:flex; align-items:center; gap:8px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12.5px;
+  }
+  .icon-item img{ width:26px; height:26px; object-fit:cover; border-radius:4px; border:1px solid var(--line); }
+  .icon-item .del{ margin-left:auto; background:none; border:none; color:#b08a6f; cursor:pointer; font-size:15px;}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div>
+    <h1>Kronkellijn Tool</h1>
+    <div class="sub">Teken golvende lijnen over 4 Instagram-slides heen. Klik op het canvas om punten toe te voegen, sleep om aan te passen.</div>
+  </div>
+
+  <section>
+    <label>Lijnen</label>
+    <div class="row">
+      <button id="addLine">+ Nieuwe lijn</button>
+    </div>
+    <div class="line-list" id="lineList"></div>
+    <div class="hint">Selecteer een lijn, klik dan op het canvas om er punten aan toe te voegen (van links naar rechts). Sleep bestaande punten om de golf te verfijnen. Klik op een punt + Delete om te verwijderen. Klik 💧 om een kleur uit een afbeelding over te nemen. Druk op <b>Enter</b> om de lijn af te ronden (bolletjes verdwijnen). <b>Ctrl+Z</b> (Cmd+Z op Mac) om een stap terug te gaan.</div>
+  </section>
+
+  <section>
+    <label>Ingrediënt-afbeeldingen</label>
+    <div class="row">
+      <button class="secondary" id="addIcon">+ Afbeelding toevoegen</button>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="icon-list" id="iconList"></div>
+    <div class="hint">PNG's met transparante achtergrond werken direct. Sleep een afbeelding naar het begin van de bijpassende lijn. Klik een afbeelding aan en sleep de <b>bolletje-handle</b> rechtsonder om te vergroten/verkleinen.</div>
+  </section>
+
+  <section>
+    <label>Achtergrond</label>
+    <div class="row" style="align-items:center;">
+      <input type="color" id="bgColor" value="#F5D5DE">
+      <span class="sub" style="margin:0;">Slide-achtergrondkleur</span>
+    </div>
+  </section>
+
+  <section>
+    <label>Lijndikte</label>
+    <input type="range" id="strokeWidth" min="3" max="18" value="7">
+  </section>
+
+  <section>
+    <label>Zoom</label>
+    <div class="row" style="align-items:center;">
+      <button class="secondary" id="zoomOut">−</button>
+      <span class="sub" id="zoomLabel" style="margin:0; min-width:44px; text-align:center;">100%</span>
+      <button class="secondary" id="zoomIn">+</button>
+      <button class="secondary" id="zoomReset">Passend</button>
+    </div>
+    <div class="hint">Of scroll met Ctrl (Cmd op Mac) ingedrukt over het canvas.</div>
+  </section>
+
+  <section>
+    <div class="row">
+      <button class="accent" id="exportBtn">Exporteer 4 slides</button>
+      <button class="secondary" id="clearBtn">Alles wissen</button>
+    </div>
+    <div class="hint">Downloadt 4 losse PNG's (1080×1350) klaar voor Instagram, in volgorde.</div>
+  </section>
+</div>
+
+<div id="main">
+  <div class="mode-banner" id="modeBanner">Selecteer of maak een lijn, klik dan op het canvas om punten te plaatsen.</div>
+  <div id="canvasWrap">
+    <canvas id="baseCanvas"></canvas>
+    <canvas id="overlay"></canvas>
+  </div>
+</div>
+
+<script>
+// ---------- Config ----------
+const SLIDE_W = 1080, SLIDE_H = 1350, N_SLIDES = 4;
+const FULL_W = SLIDE_W * N_SLIDES, FULL_H = SLIDE_H;
+
+const baseCanvas = document.getElementById('baseCanvas');
+const overlay = document.getElementById('overlay');
+[baseCanvas, overlay].forEach(c=>{
+  c.width = FULL_W; c.height = FULL_H;
+});
+
+function applyResponsiveScale(){
+  const sidebarWidth = document.getElementById('sidebar').offsetWidth;
+  const available = window.innerWidth - sidebarWidth - 60; // side padding
+  baseScale = Math.min(1, available / FULL_W);
+  updateCanvasDisplaySize();
+}
+let baseScale = 1;
+let zoomFactor = 1;
+const ZOOM_MIN = 0.3, ZOOM_MAX = 4;
+
+function updateCanvasDisplaySize(){
+  const scale = baseScale * zoomFactor;
+  [baseCanvas, overlay].forEach(c=>{
+    c.style.width = (FULL_W*scale)+'px';
+    c.style.height = (FULL_H*scale)+'px';
+  });
+  document.getElementById('zoomLabel').textContent = Math.round(zoomFactor*100)+'%';
+}
+applyResponsiveScale();
+window.addEventListener('resize', applyResponsiveScale);
+
+document.getElementById('zoomIn').addEventListener('click', ()=>{
+  zoomFactor = Math.min(ZOOM_MAX, zoomFactor * 1.25);
+  updateCanvasDisplaySize();
+});
+document.getElementById('zoomOut').addEventListener('click', ()=>{
+  zoomFactor = Math.max(ZOOM_MIN, zoomFactor / 1.25);
+  updateCanvasDisplaySize();
+});
+document.getElementById('zoomReset').addEventListener('click', ()=>{
+  zoomFactor = 1;
+  updateCanvasDisplaySize();
+});
+document.getElementById('canvasWrap').addEventListener('wheel', (e)=>{
+  if(!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  const delta = e.deltaY < 0 ? 1.1 : (1/1.1);
+  zoomFactor = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomFactor * delta));
+  updateCanvasDisplaySize();
+}, {passive:false});
+const bctx = baseCanvas.getContext('2d');
+const octx = overlay.getContext('2d');
+
+let lines = [];      // {id, color, finished, points:[{x,y}]}
+let icons = [];       // {id, img, x, y, w, h}
+let activeLineId = null;
+let draggingPoint = null;   // {lineId, index}
+let draggingIcon = null;    // {id, offX, offY}
+let resizingIcon = null;    // {id, startW, startH, startPosX, aspect}
+let selectedPoint = null;   // {lineId, index}
+let selectedIconId = null;
+let pickingColorForLineId = null; // fallback eyedropper mode
+let bgColor = '#F5D5DE';
+let strokeWidth = 7;
+let lineCounter = 0;
+let iconCounter = 0;
+
+// ---------- Undo history ----------
+let history = [];
+const HISTORY_LIMIT = 80;
+let historyLocked = false; // avoids stacking snapshots mid-drag
+
+function snapshotState(){
+  return {
+    lines: lines.map(l=>({id:l.id, color:l.color, finished:!!l.finished, points: l.points.map(p=>({x:p.x,y:p.y}))})),
+    icons: icons.map(i=>({id:i.id, img:i.img, x:i.x, y:i.y, w:i.w, h:i.h})),
+    activeLineId, bgColor, strokeWidth, lineCounter, iconCounter
+  };
+}
+function pushHistory(){
+  history.push(snapshotState());
+  if(history.length > HISTORY_LIMIT) history.shift();
+}
+function undo(){
+  if(!history.length) return;
+  const snap = history.pop();
+  lines = snap.lines.map(l=>({id:l.id, color:l.color, finished:l.finished, points:l.points.map(p=>({x:p.x,y:p.y}))}));
+  icons = snap.icons.map(i=>({id:i.id, img:i.img, x:i.x, y:i.y, w:i.w, h:i.h}));
+  activeLineId = snap.activeLineId;
+  bgColor = snap.bgColor;
+  strokeWidth = snap.strokeWidth;
+  lineCounter = snap.lineCounter;
+  iconCounter = snap.iconCounter;
+  document.getElementById('bgColor').value = bgColor;
+  document.getElementById('strokeWidth').value = strokeWidth;
+  selectedPoint = null;
+  selectedIconId = null;
+  renderLineList();
+  renderIconList();
+  updateModeBanner();
+  draw();
+}
+
+const palette = ['#C0392B','#D98A3D','#8B5E34','#3E7A5C','#5B7BA8','#9B5C8F'];
+
+function newLineColor(){
+  return palette[lines.length % palette.length];
+}
+
+// ---------- Line list UI ----------
+function renderLineList(){
+  const el = document.getElementById('lineList');
+  el.innerHTML = '';
+  lines.forEach(line=>{
+    const row = document.createElement('div');
+    row.className = 'line-item' + (line.id===activeLineId ? ' active':'');
+    row.innerHTML = `
+      <span class="swatch" style="background:${line.color}"></span>
+      <span>Lijn ${lines.indexOf(line)+1} (${line.points.length} pt)${line.finished ? ' ✓' : ''}</span>
+      <input type="color" value="${line.color}" data-id="${line.id}" class="colorPick">
+      <button class="eyedrop${pickingColorForLineId===line.id ? ' picking':''}" data-id="${line.id}" title="Kies kleur uit afbeelding">💧</button>
+      <button class="del" data-id="${line.id}">✕</button>
+    `;
+    row.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('colorPick') || e.target.classList.contains('del')) return;
+      activeLineId = line.id;
+      line.finished = false;
+      renderLineList();
+      updateModeBanner();
+      draw();
+    });
+    el.appendChild(row);
+  });
+  el.querySelectorAll('.colorPick').forEach(inp=>{
+    inp.addEventListener('mousedown', ()=> pushHistory());
+    inp.addEventListener('input', (e)=>{
+      const l = lines.find(l=>l.id==e.target.dataset.id);
+      l.color = e.target.value;
+      draw();
+    });
+  });
+  el.querySelectorAll('.eyedrop').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const lineId = btn.dataset.id;
+      const line = lines.find(l=>l.id==lineId);
+      if(!line) return;
+      if(window.EyeDropper){
+        const ed = new EyeDropper();
+        ed.open().then(result=>{
+          pushHistory();
+          line.color = result.sRGBHex;
+          renderLineList();
+          draw();
+        }).catch(()=>{});
+      } else {
+        pickingColorForLineId = line.id;
+        renderLineList();
+        updateModeBanner();
+      }
+    });
+  });
+  el.querySelectorAll('.del').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      pushHistory();
+      lines = lines.filter(l=>l.id!=btn.dataset.id);
+      if(activeLineId==btn.dataset.id) activeLineId = lines.length? lines[0].id : null;
+      renderLineList();
+      draw();
+    });
+  });
+}
+
+document.getElementById('addLine').addEventListener('click', ()=>{
+  pushHistory();
+  lineCounter++;
+  const line = {id: lineCounter, color: newLineColor(), finished:false, points: []};
+  lines.push(line);
+  activeLineId = line.id;
+  renderLineList();
+  updateModeBanner();
+  draw();
+});
+
+function updateModeBanner(){
+  const banner = document.getElementById('modeBanner');
+  if(pickingColorForLineId){
+    banner.innerHTML = `Klik ergens op het canvas (bijv. op een afbeelding) om die kleur over te nemen. <b>Esc</b> om te annuleren.`;
+    return;
+  }
+  if(activeLineId){
+    const idx = lines.findIndex(l=>l.id===activeLineId)+1;
+    banner.innerHTML = `Actief: <b>Lijn ${idx}</b> — klik op het canvas om een punt toe te voegen. Druk op <b>Enter</b> als je klaar bent.`;
+  } else {
+    banner.textContent = lines.length ? 'Klik op een lijn in de lijst om verder te bewerken, of maak een nieuwe lijn.' : 'Maak eerst een lijn aan met "+ Nieuwe lijn".';
+  }
+}
+
+// ---------- Icon list UI ----------
+document.getElementById('addIcon').addEventListener('click', ()=>{
+  document.getElementById('fileInput').click();
+});
+document.getElementById('fileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      pushHistory();
+      iconCounter++;
+      const h = 160;
+      const w = h * (img.width/img.height);
+      icons.push({id: iconCounter, img, x: 60, y: 100 + icons.length*220, w, h});
+      renderIconList();
+      draw();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+function renderIconList(){
+  const el = document.getElementById('iconList');
+  el.innerHTML = '';
+  icons.forEach(icon=>{
+    const row = document.createElement('div');
+    row.className = 'icon-item';
+    row.innerHTML = `<img src="${icon.img.src}"><span>Afbeelding ${icons.indexOf(icon)+1}</span><button class="del" data-id="${icon.id}">✕</button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('.del').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      pushHistory();
+      icons = icons.filter(i=>i.id!=btn.dataset.id);
+      renderIconList();
+      draw();
+    });
+  });
+}
+
+document.getElementById('bgColor').addEventListener('mousedown', ()=> pushHistory());
+document.getElementById('bgColor').addEventListener('input', (e)=>{
+  bgColor = e.target.value;
+  draw();
+});
+document.getElementById('strokeWidth').addEventListener('mousedown', ()=> pushHistory());
+document.getElementById('strokeWidth').addEventListener('input', (e)=>{
+  strokeWidth = parseInt(e.target.value);
+  draw();
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(!confirm('Alles wissen?')) return;
+  pushHistory();
+  lines = []; icons = []; activeLineId = null;
+  renderLineList(); renderIconList(); updateModeBanner(); draw();
+});
+
+// ---------- Smooth line (rounded corners at every point) ----------
+function drawSmoothLine(ctx, pts, color, width){
+  if(pts.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if(pts.length === 2){
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.stroke();
+    return;
+  }
+  // Each interior point becomes the control point of a quadratic curve
+  // ending at the midpoint to the next point — this guarantees a smooth,
+  // rounded arc through every point with no sharp corners, regardless
+  // of how the points are placed.
+  for(let i=1; i<pts.length-1; i++){
+    const midX = (pts[i].x + pts[i+1].x) / 2;
+    const midY = (pts[i].y + pts[i+1].y) / 2;
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+  }
+  const last = pts[pts.length-1];
+  const secondLast = pts[pts.length-2];
+  ctx.quadraticCurveTo(secondLast.x, secondLast.y, last.x, last.y);
+  ctx.stroke();
+}
+
+// ---------- Draw ----------
+function drawSlideDividers(ctx){
+  ctx.save();
+  ctx.strokeStyle = 'rgba(58,43,34,0.35)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([14,14]);
+  for(let i=1;i<N_SLIDES;i++){
+    ctx.beginPath();
+    ctx.moveTo(i*SLIDE_W, 0);
+    ctx.lineTo(i*SLIDE_W, FULL_H);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.font = '600 26px -apple-system, sans-serif';
+  ctx.fillStyle = 'rgba(58,43,34,0.4)';
+  for(let i=0;i<N_SLIDES;i++){
+    ctx.fillText('Slide '+(i+1), i*SLIDE_W + 24, 44);
+  }
+  ctx.restore();
+}
+
+function draw(){
+  bctx.clearRect(0,0,FULL_W,FULL_H);
+  bctx.fillStyle = bgColor;
+  bctx.fillRect(0,0,FULL_W,FULL_H);
+  lines.forEach(line=> drawSmoothLine(bctx, line.points, line.color, strokeWidth));
+  icons.forEach(icon=>{
+    bctx.save();
+    bctx.beginPath();
+    bctx.roundRect ? bctx.roundRect(icon.x-8, icon.y-8, icon.w+16, icon.h+16, 14) : bctx.rect(icon.x-8, icon.y-8, icon.w+16, icon.h+16);
+    bctx.fillStyle = 'rgba(255,255,255,0.0)';
+    bctx.fill();
+    bctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
+    bctx.restore();
+  });
+
+  octx.clearRect(0,0,FULL_W,FULL_H);
+  drawSlideDividers(octx);
+  // draw points for active/unfinished lines only
+  lines.forEach(line=>{
+    if(line.finished) return;
+    const isActive = line.id===activeLineId;
+    line.points.forEach((p,idx)=>{
+      octx.beginPath();
+      octx.arc(p.x,p.y, isActive?16:10, 0, Math.PI*2);
+      octx.fillStyle = isActive ? line.color : line.color+'aa';
+      octx.fill();
+      octx.lineWidth = 4;
+      octx.strokeStyle = '#fff';
+      octx.stroke();
+      if(selectedPoint && selectedPoint.lineId===line.id && selectedPoint.index===idx){
+        octx.beginPath();
+        octx.arc(p.x,p.y,24,0,Math.PI*2);
+        octx.strokeStyle = '#3A2B22';
+        octx.lineWidth = 3;
+        octx.stroke();
+      }
+    });
+  });
+  // icon selection outline + resize handle
+  icons.forEach(icon=>{
+    const isSel = icon.id===selectedIconId;
+    octx.strokeStyle = isSel ? 'rgba(192,91,60,0.7)' : 'rgba(58,43,34,0.25)';
+    octx.lineWidth = isSel ? 3 : 2;
+    octx.strokeRect(icon.x, icon.y, icon.w, icon.h);
+    if(isSel){
+      const hx = icon.x + icon.w, hy = icon.y + icon.h;
+      octx.beginPath();
+      octx.arc(hx, hy, 16, 0, Math.PI*2);
+      octx.fillStyle = '#C05B3C';
+      octx.fill();
+      octx.lineWidth = 4;
+      octx.strokeStyle = '#fff';
+      octx.stroke();
+    }
+  });
+}
+document.getElementById('bgColor').value = bgColor;
+draw();
+renderLineList();
+updateModeBanner();
+
+// ---------- Interaction ----------
+function toCanvasCoords(evt){
+  const rect = overlay.getBoundingClientRect();
+  const scaleX = FULL_W / rect.width;
+  const scaleY = FULL_H / rect.height;
+  return {
+    x: (evt.clientX - rect.left) * scaleX,
+    y: (evt.clientY - rect.top) * scaleY
+  };
+}
+
+function hitTestPoint(pos){
+  for(const line of lines){
+    if(line.finished) continue;
+    for(let i=0;i<line.points.length;i++){
+      const p = line.points[i];
+      const d = Math.hypot(p.x-pos.x, p.y-pos.y);
+      if(d < 26) return {lineId: line.id, index: i};
+    }
+  }
+  return null;
+}
+function hitTestIcon(pos){
+  for(let i=icons.length-1;i>=0;i--){
+    const icon = icons[i];
+    if(pos.x>=icon.x && pos.x<=icon.x+icon.w && pos.y>=icon.y && pos.y<=icon.y+icon.h){
+      return icon.id;
+    }
+  }
+  return null;
+}
+function hitTestIconHandle(pos){
+  if(!selectedIconId) return false;
+  const icon = icons.find(i=>i.id===selectedIconId);
+  if(!icon) return false;
+  const hx = icon.x + icon.w, hy = icon.y + icon.h;
+  return Math.hypot(pos.x-hx, pos.y-hy) < 30;
+}
+function sampleColorAt(pos){
+  const x = Math.round(Math.max(0, Math.min(FULL_W-1, pos.x)));
+  const y = Math.round(Math.max(0, Math.min(FULL_H-1, pos.y)));
+  const data = bctx.getImageData(x, y, 1, 1).data;
+  const toHex = v => v.toString(16).padStart(2,'0');
+  return '#' + toHex(data[0]) + toHex(data[1]) + toHex(data[2]);
+}
+
+overlay.addEventListener('mousedown', (e)=>{
+  const pos = toCanvasCoords(e);
+
+  if(pickingColorForLineId){
+    const line = lines.find(l=>l.id===pickingColorForLineId);
+    if(line){
+      pushHistory();
+      line.color = sampleColorAt(pos);
+    }
+    pickingColorForLineId = null;
+    renderLineList();
+    updateModeBanner();
+    draw();
+    return;
+  }
+
+  const ptHit = hitTestPoint(pos);
+  if(ptHit){
+    pushHistory();
+    draggingPoint = ptHit;
+    selectedPoint = ptHit;
+    selectedIconId = null;
+    draw();
+    return;
+  }
+
+  if(hitTestIconHandle(pos)){
+    const icon = icons.find(i=>i.id===selectedIconId);
+    pushHistory();
+    resizingIcon = {id: icon.id, startW: icon.w, startH: icon.h, startPosX: pos.x, aspect: icon.w/icon.h};
+    return;
+  }
+
+  const iconHit = hitTestIcon(pos);
+  if(iconHit){
+    pushHistory();
+    selectedIconId = iconHit;
+    const icon = icons.find(i=>i.id===iconHit);
+    draggingIcon = {id: iconHit, offX: pos.x-icon.x, offY: pos.y-icon.y};
+    draw();
+    return;
+  }
+
+  // clicked empty space
+  selectedIconId = null;
+  if(activeLineId){
+    const line = lines.find(l=>l.id===activeLineId);
+    if(line && !line.finished){
+      pushHistory();
+      line.points.push({x: pos.x, y: pos.y});
+      selectedPoint = {lineId: activeLineId, index: line.points.length-1};
+      renderLineList();
+    }
+  }
+  draw();
+});
+
+window.addEventListener('mousemove', (e)=>{
+  if(!draggingPoint && !draggingIcon && !resizingIcon) return;
+  const pos = toCanvasCoords(e);
+  if(draggingPoint){
+    const line = lines.find(l=>l.id===draggingPoint.lineId);
+    line.points[draggingPoint.index] = {x: pos.x, y: pos.y};
+    draw();
+  } else if(draggingIcon){
+    const icon = icons.find(i=>i.id===draggingIcon.id);
+    icon.x = pos.x - draggingIcon.offX;
+    icon.y = pos.y - draggingIcon.offY;
+    draw();
+  } else if(resizingIcon){
+    const icon = icons.find(i=>i.id===resizingIcon.id);
+    const delta = pos.x - resizingIcon.startPosX;
+    let newW = Math.max(30, resizingIcon.startW + delta);
+    let newH = newW / resizingIcon.aspect;
+    icon.w = newW;
+    icon.h = newH;
+    draw();
+  }
+});
+window.addEventListener('mouseup', ()=>{
+  draggingPoint = null;
+  draggingIcon = null;
+  resizingIcon = null;
+});
+
+window.addEventListener('keydown', (e)=>{
+  const tag = (e.target && e.target.tagName) || '';
+  const inField = tag === 'INPUT' || tag === 'TEXTAREA';
+
+  if(e.key==='Escape' && pickingColorForLineId){
+    pickingColorForLineId = null;
+    renderLineList();
+    updateModeBanner();
+    return;
+  }
+
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='z'){
+    e.preventDefault();
+    undo();
+    return;
+  }
+
+  if((e.key==='Delete' || e.key==='Backspace') && selectedPoint && !inField){
+    pushHistory();
+    const line = lines.find(l=>l.id===selectedPoint.lineId);
+    if(line){
+      line.points.splice(selectedPoint.index,1);
+      selectedPoint = null;
+      renderLineList();
+      draw();
+    }
+    return;
+  }
+
+  if(e.key==='Enter' && activeLineId && !inField){
+    e.preventDefault();
+    pushHistory();
+    const line = lines.find(l=>l.id===activeLineId);
+    if(line) line.finished = true;
+    activeLineId = null;
+    selectedPoint = null;
+    renderLineList();
+    updateModeBanner();
+    draw();
+  }
+});
+
+// ---------- Export ----------
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  // redraw clean (without divider labels/handles) to an offscreen canvas
+  const clean = document.createElement('canvas');
+  clean.width = FULL_W; clean.height = FULL_H;
+  const cctx = clean.getContext('2d');
+  cctx.fillStyle = bgColor;
+  cctx.fillRect(0,0,FULL_W,FULL_H);
+  lines.forEach(line=> drawSmoothLine(cctx, line.points, line.color, strokeWidth));
+  icons.forEach(icon=>{
+    cctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
+  });
+
+  for(let i=0;i<N_SLIDES;i++){
+    const slice = document.createElement('canvas');
+    slice.width = SLIDE_W; slice.height = SLIDE_H;
+    const sctx = slice.getContext('2d');
+    sctx.drawImage(clean, i*SLIDE_W, 0, SLIDE_W, SLIDE_H, 0, 0, SLIDE_W, SLIDE_H);
+    slice.toBlob(blob=>{
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `slide-${i+1}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, 'image/png');
+  }
+});
+</script>
+</body>
+</html>
