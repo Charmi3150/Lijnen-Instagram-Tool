@@ -302,9 +302,10 @@
     <div id="projectStatus" class="hint"></div>
     <div class="row" style="margin-top:6px;">
       <button class="secondary" id="exportProjectFileBtn" style="font-size:11.5px; padding:6px 10px;">Downloaden als back-upbestand</button>
+      <button class="secondary" id="openProjectFileBtn" style="font-size:11.5px; padding:6px 10px;">Bestand openen…</button>
     </div>
     <input type="file" id="projectFileInput" accept=".json" style="display:none;">
-    <div class="hint">Projecten worden bewaard in deze browser op dit apparaat — geen bestand nodig. Open dezelfde webpagina later opnieuw om verder te werken.</div>
+    <div class="hint">Projecten worden bewaard in deze browser op dit apparaat — geen bestand nodig. Open dezelfde webpagina later opnieuw om verder te werken. Heb je al een .json-bestand van eerder? Open het via "Bestand openen…".</div>
   </section>
 
   <section>
@@ -347,6 +348,31 @@
       <div class="field-label-row"><label>Letterspatiëring</label><span class="field-val" id="waveLetterSpacingVal">2px</span></div>
       <input type="range" id="waveLetterSpacing" min="-4" max="30" value="2">
     </div>
+  </section>
+
+  <section>
+    <label>Vorm tussen herhalingen</label>
+    <div class="field">
+      <div class="field-label-row"><label>Vorm</label></div>
+      <select id="shapeType">
+        <option value="none" selected>Geen</option>
+        <option value="heart">Hartje</option>
+        <option value="circle">Cirkel</option>
+        <option value="star">Ster</option>
+        <option value="cloud">Wolkje</option>
+      </select>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <div class="field-label-row"><label>Grootte</label><span class="field-val" id="shapeSizeVal">48px</span></div>
+        <input type="range" id="shapeSize" min="10" max="200" value="48">
+      </div>
+      <div class="field">
+        <div class="field-label-row"><label>Kleur</label></div>
+        <input type="color" id="shapeColor" value="#ffffff">
+      </div>
+    </div>
+    <div class="hint">Verschijnt tussen elke herhaling van de tekst langs de lijn (zoals het wolkje-icoontje in het Les Deux-voorbeeld). Alleen zichtbaar als "Herhaal tekst" hierboven aan staat.</div>
   </section>
 
   <section>
@@ -2522,6 +2548,9 @@ let waveFontSize = 64;
 let waveBold = true;
 let waveTextColor = '#ffffff';
 let waveLetterSpacing = 2;
+let shapeType = 'none';
+let shapeSize = 48;
+let shapeColor = '#ffffff';
 let waveAmplitude = 90;
 let waveWavelength = 850;
 let wavePhase = 0; // degrees
@@ -2908,6 +2937,16 @@ document.getElementById('waveVisible').addEventListener('change', (e)=>{
   draw();
 });
 
+document.getElementById('shapeType').addEventListener('change', (e)=>{
+  shapeType = e.target.value;
+  draw();
+});
+document.getElementById('shapeColor').addEventListener('input', (e)=>{
+  shapeColor = e.target.value;
+  draw();
+});
+bindRange('shapeSize','shapeSizeVal', v=>Math.round(v)+'px', v=> shapeSize=v);
+
 document.querySelectorAll('.preset-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     waveAmplitude = parseFloat(btn.dataset.amp);
@@ -3068,38 +3107,89 @@ function buildFontCss(){
 }
 
 function drawTextOnPath(ctx, path, opts){
-  const {text, fontCss, color, letterSpacing, repeat, startS} = opts;
+  const {text, fontCss, color, letterSpacing, repeat, startS, shapeType, shapeSize, shapeColor} = opts;
   if(!text) return;
   ctx.save();
   ctx.font = fontCss;
-  ctx.fillStyle = color;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
   let s = startS || 0;
   const rightLimit = path.totalLength + 400;
-  const src = repeat ? (text + '   ') : text;
-  let i = 0;
+  const hasShape = repeat && shapeType && shapeType !== 'none';
   let guard = 0;
+
   while(guard < 8000){
-    guard++;
-    const ch = src[i % src.length];
-    i++;
-    const w = ctx.measureText(ch).width;
-    if(w > 0){
-      const pos = posAtArcLengthExt(path, s + w/2);
-      ctx.save();
-      ctx.translate(pos.x, pos.y);
-      ctx.rotate(pos.angle);
-      ctx.fillText(ch, 0, 0);
-      ctx.restore();
+    // one full pass of the text
+    for(let i=0; i<text.length && guard<8000; i++){
+      guard++;
+      const ch = text[i];
+      const w = ctx.measureText(ch).width;
+      if(w > 0){
+        const pos = posAtArcLengthExt(path, s + w/2);
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.rotate(pos.angle);
+        ctx.fillStyle = color;
+        ctx.font = fontCss;
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+      }
+      s += w + letterSpacing;
+      if(s > rightLimit){ ctx.restore(); return; }
     }
-    s += w + letterSpacing;
-    if(!repeat){
-      if(i >= text.length) break;
-    } else if(s > rightLimit){
-      break;
+    if(!repeat) break;
+    s += letterSpacing * 3;
+    if(hasShape){
+      const shapePos = posAtArcLengthExt(path, s + shapeSize/2);
+      drawShapeAt(ctx, shapePos, shapeType, shapeSize, shapeColor || color);
+      s += shapeSize + letterSpacing * 3;
+    } else {
+      s += letterSpacing * 3;
     }
+    if(s > rightLimit) break;
   }
+  ctx.restore();
+}
+
+// Draws one decorative shape centered at `pos` (a {x,y,angle} from the
+// path), rotated to match the path's tangent there, similar to how a
+// character is placed by drawTextOnPath.
+function drawShapeAt(ctx, pos, type, size, color){
+  ctx.save();
+  ctx.translate(pos.x, pos.y);
+  ctx.rotate(pos.angle);
+  ctx.fillStyle = color;
+  const r = size/2;
+  ctx.beginPath();
+  if(type === 'heart'){
+    const w = size, h = size;
+    ctx.moveTo(0, h*0.32);
+    ctx.bezierCurveTo(0, h*0.12, -w*0.22, -h*0.12, -w*0.42, -h*0.12);
+    ctx.bezierCurveTo(-w*0.72, -h*0.12, -w*0.72, h*0.24, -w*0.72, h*0.24);
+    ctx.bezierCurveTo(-w*0.72, h*0.46, -w*0.46, h*0.66, 0, h*0.88);
+    ctx.bezierCurveTo(w*0.46, h*0.66, w*0.72, h*0.46, w*0.72, h*0.24);
+    ctx.bezierCurveTo(w*0.72, h*0.24, w*0.72, -h*0.12, w*0.42, -h*0.12);
+    ctx.bezierCurveTo(w*0.22, -h*0.12, 0, h*0.12, 0, h*0.32);
+    ctx.closePath();
+  } else if(type === 'circle'){
+    ctx.arc(0, 0, r, 0, Math.PI*2);
+  } else if(type === 'star'){
+    const points = 5, outerR = r, innerR = r*0.45;
+    for(let i=0;i<points*2;i++){
+      const rad = i%2===0 ? outerR : innerR;
+      const angle = (Math.PI/points)*i - Math.PI/2;
+      const x = Math.cos(angle)*rad, y = Math.sin(angle)*rad;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+  } else if(type === 'cloud'){
+    ctx.arc(-r*0.45, r*0.12, r*0.42, 0, Math.PI*2);
+    ctx.arc(r*0.45, r*0.12, r*0.42, 0, Math.PI*2);
+    ctx.arc(-r*0.05, -r*0.18, r*0.5, 0, Math.PI*2);
+    ctx.arc(r*0.4, -r*0.05, r*0.4, 0, Math.PI*2);
+    ctx.rect(-r*0.5, r*0.1, r, r*0.35);
+  }
+  ctx.fill();
   ctx.restore();
 }
 
@@ -3141,7 +3231,8 @@ function renderLayerContent(ctx, layer, path, animT, offsetX){
     if(waveText){
       drawTextOnPath(ctx, path, {
         text: waveText, fontCss: buildFontCss(), color: waveTextColor,
-        letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: 0
+        letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: 0,
+        shapeType, shapeSize, shapeColor
       });
     }
   } else if(layer.type === 'icon'){
@@ -4194,6 +4285,7 @@ function serializeProject(){
     waveText, waveRepeat, waveFontFamily, waveFontSize, waveBold, waveTextColor,
     waveLetterSpacing, waveAmplitude, waveWavelength, wavePhase, waveBaselinePct,
     waveOffsetX, waveVisible, waveColor, waveThickness,
+    shapeType, shapeSize, shapeColor,
     bgColor, strokeWidth,
     animIconId, animDuration, animDelay, animHold, animEasing, animRotate,
     lineCounter, iconCounter,
@@ -4227,6 +4319,10 @@ function applyAllUIFromState(){
   document.getElementById('waveVisible').checked = waveVisible;
   document.getElementById('waveStrokeFields').style.display = waveVisible ? '' : 'none';
   document.getElementById('waveColor').value = waveColor;
+  document.getElementById('shapeType').value = shapeType;
+  document.getElementById('shapeColor').value = shapeColor;
+  document.getElementById('shapeSize').value = shapeSize;
+  document.getElementById('shapeSizeVal').textContent = Math.round(shapeSize)+'px';
   document.getElementById('waveThickness').value = waveThickness;
   document.getElementById('bgColor').value = bgColor;
   document.getElementById('strokeWidth').value = strokeWidth;
@@ -4271,6 +4367,9 @@ async function applyProjectData(data){
   waveOffsetX = data.waveOffsetX ?? waveOffsetX;
   waveVisible = data.waveVisible ?? waveVisible;
   waveColor = data.waveColor ?? waveColor;
+  shapeType = data.shapeType ?? shapeType;
+  shapeSize = data.shapeSize ?? shapeSize;
+  shapeColor = data.shapeColor ?? shapeColor;
   waveThickness = data.waveThickness ?? waveThickness;
   bgColor = data.bgColor ?? bgColor;
   strokeWidth = data.strokeWidth ?? strokeWidth;
@@ -4446,6 +4545,9 @@ document.getElementById('exportProjectFileBtn').addEventListener('click', ()=>{
   const stamp = new Date().toISOString().slice(0,10);
   const name = (document.getElementById('projectNameInput').value || 'kronkellijn-project').trim().replace(/[^\w\-]+/g,'-');
   downloadBlob(blob, `${name}-${stamp}.json`);
+});
+document.getElementById('openProjectFileBtn').addEventListener('click', ()=>{
+  document.getElementById('projectFileInput').click();
 });
 document.getElementById('projectFileInput').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
