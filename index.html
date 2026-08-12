@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kronkellijn Tool — Carmi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700;800&family=Montserrat:ital,wght@0,400;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet">
 <style>
   :root{
     --paper: #FBF3E7;
@@ -221,6 +224,42 @@
     min-height: 16px;
     margin-top: 8px;
   }
+  #previewOverlay{
+    position:fixed; inset:0; background:rgba(58,43,34,0.55);
+    display:none; align-items:center; justify-content:center;
+    z-index:1000;
+  }
+  #previewOverlay.open{ display:flex; }
+  #previewBox{
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 20px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+  #previewHeaderRow{
+    display:flex; align-items:center; justify-content:space-between; width:100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  #previewSlideLabel{ font-size:13px; color:#8a7862; font-weight:600; }
+  #previewCloseBtn{
+    background:none; border:none; font-size:18px; cursor:pointer; color: var(--ink);
+    line-height:1; padding:2px 6px;
+  }
+  #previewCanvas{
+    width: 320px; height: 400px;
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(58,43,34,0.25);
+    background:#fff;
+  }
+  #previewControls{ display:flex; align-items:center; gap:10px; }
+  #previewControls button{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+  }
+  #previewDots{ display:flex; gap:6px; }
+  .preview-dot{ width:7px; height:7px; border-radius:50%; background:var(--line); }
+  .preview-dot.active{ background: var(--accent); }
 </style>
 </head>
 <body>
@@ -250,6 +289,8 @@
           <option value="'Helvetica Neue', sans-serif">Helvetica</option>
           <option value="Impact, sans-serif">Impact</option>
           <option value="'Courier New', monospace">Courier</option>
+          <option value="'Montserrat', sans-serif">Montserrat</option>
+          <option value="'League Spartan', sans-serif">League Spartan</option>
         </select>
       </div>
       <div class="field">
@@ -295,6 +336,14 @@
       <div class="field-label-row"><label>Verticale positie</label><span class="field-val" id="waveBaselineVal">50%</span></div>
       <input type="range" id="waveBaseline" min="0" max="100" value="45">
     </div>
+    <div class="field">
+      <div class="field-label-row"><label>Horizontale positie</label><span class="field-val" id="waveOffsetXVal">0px</span></div>
+      <input type="range" id="waveOffsetX" min="-1600" max="1600" value="0">
+    </div>
+    <div class="row">
+      <button type="button" class="secondary" id="resetWavePosBtn" style="font-size:12px; padding:6px 10px;">Positie herstellen</button>
+    </div>
+    <div class="hint">Sleep de tekst ook rechtstreeks op het canvas naar de gewenste plek (klik op een leeg deel en sleep).</div>
     <div class="check-row">
       <input type="checkbox" id="waveVisible">
       <label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px;" for="waveVisible">Toon de lijn zelf (niet alleen de tekst)</label>
@@ -333,6 +382,10 @@
       <div class="field-label-row"><label>Animerend icoon</label></div>
       <select id="animIconSelect"><option value="">— geen —</option></select>
     </div>
+    <div class="field">
+      <div class="field-label-row"><label>Grootte icoon</label><span class="field-val" id="animIconSizeVal">160px</span></div>
+      <input type="range" id="animIconSize" min="30" max="500" value="160">
+    </div>
     <div class="grid2">
       <div class="field">
         <div class="field-label-row"><label>Duur</label><span class="field-val" id="animDurationVal">5.0s</span></div>
@@ -362,6 +415,10 @@
       <button class="secondary" id="playBtn">▶</button>
       <input type="range" id="scrub" min="0" max="1000" value="0">
     </div>
+    <div class="row" style="margin-top:10px;">
+      <button class="accent" id="previewCarouselBtn">Voorbeeld per slide ▸</button>
+    </div>
+    <div class="hint">Speelt elke slide af zoals hij er in de Instagram-carrousel uit zou zien, inclusief het naadloze vertrekpunt van de animatie.</div>
     <div class="hint">Kies hierboven welke afbeelding meebeweegt over de golvende lijn. Speel af om de beweging te bekijken voor je exporteert.</div>
   </section>
 
@@ -411,6 +468,22 @@
   <div id="canvasWrap">
     <canvas id="baseCanvas"></canvas>
     <canvas id="overlay"></canvas>
+  </div>
+</div>
+
+<div id="previewOverlay">
+  <div id="previewBox">
+    <div id="previewHeaderRow">
+      <span id="previewSlideLabel">Slide 1 / 4</span>
+      <button id="previewCloseBtn" title="Sluiten">✕</button>
+    </div>
+    <canvas id="previewCanvas"></canvas>
+    <div id="previewDots"></div>
+    <div id="previewControls">
+      <button class="secondary" id="previewPrevBtn">‹ Vorige</button>
+      <button id="previewPlayPauseBtn">❚❚ Pauze</button>
+      <button class="secondary" id="previewNextBtn">Volgende ›</button>
+    </div>
   </div>
 </div>
 
@@ -509,6 +582,14 @@ let previewT = 0;
 let previewPlaying = false;
 let previewStartPerf = null;
 let previewStartT = 0;
+
+// Horizontal drag offset for the text along the path (px of arc-length).
+// Declared here (near the top) on purpose: draw() reads it, and draw()
+// gets invoked very early (from the first slider's initial sync), so
+// this must exist before any of that code runs.
+let waveOffsetX = 0;
+let draggingWave = null; // {startPosX, startPosY, startOffset, startBaselinePct}
+let lastAnimPos = null;
 
 const EASINGS = {
   linear: u => u,
@@ -642,8 +723,10 @@ function updateModeBanner(){
   if(activeLineId){
     const idx = lines.findIndex(l=>l.id===activeLineId)+1;
     banner.innerHTML = `Actief: <b>Lijn ${idx}</b> — klik op het canvas om een punt toe te voegen. Druk op <b>Enter</b> als je klaar bent.`;
+    overlay.style.cursor = 'crosshair';
   } else {
-    banner.textContent = 'Tekst en golf stel je in via de zijbalk. Losse handmatige lijnen (optioneel) maak je hier met "+ Nieuwe lijn".';
+    banner.textContent = 'Sleep op het canvas om de tekst te verplaatsen. Losse handmatige lijnen (optioneel) maak je met "+ Nieuwe lijn".';
+    overlay.style.cursor = 'grab';
   }
 }
 
@@ -712,10 +795,35 @@ function refreshAnimIconSelect(){
     sel.value = '';
     animIconId = '';
   }
+  syncAnimIconSizeUI();
 }
 document.getElementById('animIconSelect').addEventListener('change', (e)=>{
   animIconId = e.target.value;
   renderIconList();
+  syncAnimIconSizeUI();
+  draw();
+});
+
+function syncAnimIconSizeUI(){
+  const icon = getAnimIcon();
+  const el = document.getElementById('animIconSize');
+  const val = document.getElementById('animIconSizeVal');
+  if(icon){
+    el.disabled = false;
+    el.value = Math.round(icon.w);
+    val.textContent = Math.round(icon.w)+'px';
+  } else {
+    el.disabled = true;
+  }
+}
+document.getElementById('animIconSize').addEventListener('input', (e)=>{
+  const icon = getAnimIcon();
+  if(!icon) return;
+  const newW = parseFloat(e.target.value);
+  const aspect = icon.w / icon.h;
+  icon.w = newW;
+  icon.h = newW / aspect;
+  document.getElementById('animIconSizeVal').textContent = Math.round(newW)+'px';
   draw();
 });
 
@@ -763,7 +871,18 @@ bindRange('waveAmplitude','waveAmplitudeVal', v=>v+'px', v=> waveAmplitude=v);
 bindRange('waveWavelength','waveWavelengthVal', v=>v+'px', v=> waveWavelength=v);
 bindRange('wavePhase','wavePhaseVal', v=>v+'°', v=> wavePhase=v);
 bindRange('waveBaseline','waveBaselineVal', v=>v+'%', v=> waveBaselinePct=v);
+bindRange('waveOffsetX','waveOffsetXVal', v=>Math.round(v)+'px', v=> waveOffsetX=v);
 bindRange('waveThickness', null, v=>v, v=> waveThickness=v);
+
+document.getElementById('resetWavePosBtn').addEventListener('click', ()=>{
+  waveOffsetX = 0;
+  waveBaselinePct = 45;
+  document.getElementById('waveBaseline').value = 45;
+  document.getElementById('waveBaselineVal').textContent = '45%';
+  document.getElementById('waveOffsetX').value = 0;
+  document.getElementById('waveOffsetXVal').textContent = '0px';
+  draw();
+});
 
 document.getElementById('waveVisible').addEventListener('change', (e)=>{
   waveVisible = e.target.checked;
@@ -893,30 +1012,53 @@ function arcLengthAtX(path, x){
   return path.ss[idx];
 }
 
+// Like posAtArcLength, but extrapolates in a straight line past the
+// path's two ends instead of clamping — so dragged text can start
+// before x=0 or continue past the right edge and still curve/move
+// correctly as it re-enters the visible path.
+function posAtArcLengthExt(path, s){
+  if(s < 0){
+    const p0 = posAtArcLength(path, 0);
+    const p1 = posAtArcLength(path, Math.min(20, path.totalLength));
+    const dxp = p1.x-p0.x, dyp = p1.y-p0.y, len = Math.hypot(dxp,dyp)||1;
+    const ux = dxp/len, uy = dyp/len;
+    return {x: p0.x + ux*s, y: p0.y + uy*s, angle: Math.atan2(dyp,dxp)};
+  }
+  if(s > path.totalLength){
+    const pN = posAtArcLength(path, path.totalLength);
+    const pNm = posAtArcLength(path, Math.max(0, path.totalLength-20));
+    const dxp = pN.x-pNm.x, dyp = pN.y-pNm.y, len = Math.hypot(dxp,dyp)||1;
+    const ux = dxp/len, uy = dyp/len;
+    const over = s - path.totalLength;
+    return {x: pN.x + ux*over, y: pN.y + uy*over, angle: Math.atan2(dyp,dxp)};
+  }
+  return posAtArcLength(path, s);
+}
+
 function buildFontCss(){
   return (waveBold ? 'bold ' : '') + waveFontSize + 'px ' + waveFontFamily;
 }
 
 function drawTextOnPath(ctx, path, opts){
-  const {text, fontCss, color, letterSpacing, repeat} = opts;
+  const {text, fontCss, color, letterSpacing, repeat, startS} = opts;
   if(!text) return;
   ctx.save();
   ctx.font = fontCss;
   ctx.fillStyle = color;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
-  let s = 0;
-  const maxS = path.totalLength;
+  let s = startS || 0;
+  const rightLimit = path.totalLength + 400;
   const src = repeat ? (text + '   ') : text;
   let i = 0;
   let guard = 0;
-  while(s < maxS && guard < 8000){
+  while(guard < 8000){
     guard++;
     const ch = src[i % src.length];
     i++;
     const w = ctx.measureText(ch).width;
     if(w > 0){
-      const pos = posAtArcLength(path, Math.min(s + w/2, maxS));
+      const pos = posAtArcLengthExt(path, s + w/2);
       ctx.save();
       ctx.translate(pos.x, pos.y);
       ctx.rotate(pos.angle);
@@ -924,7 +1066,11 @@ function drawTextOnPath(ctx, path, opts){
       ctx.restore();
     }
     s += w + letterSpacing;
-    if(!repeat && i >= text.length) break;
+    if(!repeat){
+      if(i >= text.length) break;
+    } else if(s > rightLimit){
+      break;
+    }
   }
   ctx.restore();
 }
@@ -975,7 +1121,7 @@ function renderSceneAt(ctx, animT, offsetX, w, h, path){
   if(waveText){
     drawTextOnPath(ctx, path, {
       text: waveText, fontCss: buildFontCss(), color: waveTextColor,
-      letterSpacing: waveLetterSpacing, repeat: waveRepeat
+      letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: waveOffsetX
     });
   }
 
@@ -1018,8 +1164,6 @@ function drawSlideDividers(ctx){
   }
   ctx.restore();
 }
-
-let lastAnimPos = null;
 
 function draw(){
   const path = buildWavePath();
@@ -1079,6 +1223,17 @@ draw();
 renderLineList();
 renderIconList();
 updateModeBanner();
+
+// Custom web fonts (Montserrat, League Spartan) load asynchronously —
+// redraw once they're actually available so the canvas text doesn't
+// stay stuck on the fallback font.
+if(document.fonts && document.fonts.load){
+  Promise.all([
+    document.fonts.load('700 64px "Montserrat"'),
+    document.fonts.load('700 64px "League Spartan"')
+  ]).catch(()=>{}).finally(()=>{ draw(); });
+  document.fonts.ready.then(()=> draw()).catch(()=>{});
+}
 
 // ---------- Interaction ----------
 function toCanvasCoords(evt){
@@ -1186,13 +1341,31 @@ overlay.addEventListener('mousedown', (e)=>{
       selectedPoint = {lineId: activeLineId, index: line.points.length-1};
       renderLineList();
     }
+  } else {
+    // No line is being edited — treat this as "grab the text" so it
+    // can be dragged freely (horizontally along the path, vertically
+    // by moving the baseline).
+    draggingWave = {
+      startPosX: pos.x, startPosY: pos.y,
+      startOffset: waveOffsetX, startBaselinePct: waveBaselinePct
+    };
+    overlay.style.cursor = 'grabbing';
   }
   draw();
 });
 
 window.addEventListener('mousemove', (e)=>{
-  if(!draggingPoint && !draggingIcon && !resizingIcon) return;
+  if(!draggingPoint && !draggingIcon && !resizingIcon && !draggingWave) return;
   const pos = toCanvasCoords(e);
+  if(draggingWave){
+    const dx = pos.x - draggingWave.startPosX;
+    const dy = pos.y - draggingWave.startPosY;
+    waveOffsetX = draggingWave.startOffset + dx;
+    waveBaselinePct = Math.max(0, Math.min(100, draggingWave.startBaselinePct + (dy/FULL_H)*100));
+    syncWaveSliderUI();
+    draw();
+    return;
+  }
   if(draggingPoint){
     const line = lines.find(l=>l.id===draggingPoint.lineId);
     line.points[draggingPoint.index] = {x: pos.x, y: pos.y};
@@ -1209,6 +1382,7 @@ window.addEventListener('mousemove', (e)=>{
     let newH = newW / resizingIcon.aspect;
     icon.w = newW;
     icon.h = newH;
+    if(String(icon.id)===String(animIconId)) syncAnimIconSizeUI();
     draw();
   }
 });
@@ -1216,7 +1390,19 @@ window.addEventListener('mouseup', ()=>{
   draggingPoint = null;
   draggingIcon = null;
   resizingIcon = null;
+  if(draggingWave){ draggingWave = null; overlay.style.cursor = activeLineId ? 'crosshair' : 'grab'; }
 });
+
+function syncWaveSliderUI(){
+  const offEl = document.getElementById('waveOffsetX');
+  const offVal = document.getElementById('waveOffsetXVal');
+  if(offEl){ offEl.value = waveOffsetX; }
+  if(offVal){ offVal.textContent = Math.round(waveOffsetX)+'px'; }
+  const baseEl = document.getElementById('waveBaseline');
+  const baseVal = document.getElementById('waveBaselineVal');
+  if(baseEl){ baseEl.value = waveBaselinePct; }
+  if(baseVal){ baseVal.textContent = Math.round(waveBaselinePct)+'%'; }
+}
 
 window.addEventListener('keydown', (e)=>{
   const tag = (e.target && e.target.tagName) || '';
@@ -1259,6 +1445,114 @@ window.addEventListener('keydown', (e)=>{
     updateModeBanner();
     draw();
   }
+});
+
+// ---------- Preview modal: simulates the Instagram carousel ----------
+const previewCanvas = document.getElementById('previewCanvas');
+previewCanvas.width = SLIDE_W;
+previewCanvas.height = SLIDE_H;
+const previewCtx = previewCanvas.getContext('2d');
+
+let previewModalState = null; // {path, tEnterList, tEndAll, slideIndex, playing, currentAnimT, startPerf, startAnimT, rafId}
+
+function renderPreviewDots(){
+  const el = document.getElementById('previewDots');
+  el.innerHTML = '';
+  for(let i=0;i<N_SLIDES;i++){
+    const dot = document.createElement('span');
+    dot.className = 'preview-dot' + (previewModalState && previewModalState.slideIndex===i ? ' active' : '');
+    el.appendChild(dot);
+  }
+}
+
+function openPreviewModal(){
+  const path = buildWavePath();
+  const tEnterList = computeEnterTimes(path);
+  const tEndAll = animDelay + animDuration + animHold;
+  previewModalState = {path, tEnterList, tEndAll, slideIndex:0, playing:true, currentAnimT:0};
+  document.getElementById('previewOverlay').classList.add('open');
+  renderPreviewDots();
+  startPreviewSlide(0);
+}
+
+function closePreviewModal(){
+  if(previewModalState && previewModalState.rafId) cancelAnimationFrame(previewModalState.rafId);
+  previewModalState = null;
+  document.getElementById('previewOverlay').classList.remove('open');
+}
+
+function startPreviewSlide(idx){
+  if(!previewModalState) return;
+  if(previewModalState.rafId) cancelAnimationFrame(previewModalState.rafId);
+  idx = (idx + N_SLIDES) % N_SLIDES;
+  previewModalState.slideIndex = idx;
+  previewModalState.playing = true;
+  previewModalState.currentAnimT = previewModalState.tEnterList[idx];
+  previewModalState.startPerf = performance.now();
+  previewModalState.startAnimT = previewModalState.currentAnimT;
+  document.getElementById('previewSlideLabel').textContent = `Slide ${idx+1} / ${N_SLIDES}`;
+  document.getElementById('previewPlayPauseBtn').textContent = '❚❚ Pauze';
+  renderPreviewDots();
+  previewModalLoop();
+}
+
+function previewModalLoop(){
+  if(!previewModalState) return;
+  const st = previewModalState;
+  if(st.playing){
+    const elapsed = (performance.now() - st.startPerf)/1000;
+    st.currentAnimT = Math.min(st.tEndAll, st.startAnimT + elapsed);
+    if(st.currentAnimT >= st.tEndAll){
+      st.playing = false;
+      document.getElementById('previewPlayPauseBtn').textContent = '▶ Opnieuw';
+    }
+  }
+  renderSceneAt(previewCtx, st.currentAnimT, st.slideIndex*SLIDE_W, SLIDE_W, SLIDE_H, st.path);
+  st.rafId = requestAnimationFrame(previewModalLoop);
+}
+
+document.getElementById('previewCarouselBtn').addEventListener('click', ()=>{
+  const icon = getAnimIcon();
+  if(!icon){
+    alert('Kies eerst bij "Animatie" welke afbeelding moet meebewegen over de lijn.');
+    return;
+  }
+  previewPlaying = false;
+  updatePlayButton();
+  openPreviewModal();
+});
+document.getElementById('previewCloseBtn').addEventListener('click', closePreviewModal);
+document.getElementById('previewOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'previewOverlay') closePreviewModal();
+});
+document.getElementById('previewPrevBtn').addEventListener('click', ()=>{
+  if(!previewModalState) return;
+  startPreviewSlide(previewModalState.slideIndex - 1);
+});
+document.getElementById('previewNextBtn').addEventListener('click', ()=>{
+  if(!previewModalState) return;
+  startPreviewSlide(previewModalState.slideIndex + 1);
+});
+document.getElementById('previewPlayPauseBtn').addEventListener('click', ()=>{
+  if(!previewModalState) return;
+  const st = previewModalState;
+  if(!st.playing && st.currentAnimT >= st.tEndAll){
+    // restart this slide from its natural entry point
+    startPreviewSlide(st.slideIndex);
+    return;
+  }
+  st.playing = !st.playing;
+  if(st.playing){
+    st.startPerf = performance.now();
+    st.startAnimT = st.currentAnimT;
+  }
+  document.getElementById('previewPlayPauseBtn').textContent = st.playing ? '❚❚ Pauze' : '▶ Verder';
+});
+window.addEventListener('keydown', (e)=>{
+  if(!previewModalState) return;
+  if(e.key === 'Escape') closePreviewModal();
+  if(e.key === 'ArrowRight') startPreviewSlide(previewModalState.slideIndex + 1);
+  if(e.key === 'ArrowLeft') startPreviewSlide(previewModalState.slideIndex - 1);
 });
 
 // ---------- Export: static PNG slides ----------
