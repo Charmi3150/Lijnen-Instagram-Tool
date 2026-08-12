@@ -260,6 +260,23 @@
   #previewDots{ display:flex; gap:6px; }
   .preview-dot{ width:7px; height:7px; border-radius:50%; background:var(--line); }
   .preview-dot.active{ background: var(--accent); }
+  .layer-list{ display:flex; flex-direction:column; gap:4px; }
+  .layer-item{
+    display:flex; align-items:center; gap:6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12.5px;
+    padding: 5px 7px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+  }
+  .layer-item.selected{ border-color: var(--accent); background: #FFF6EF; }
+  .layer-item .layer-label{ flex:1; cursor:pointer; }
+  .layer-item button{
+    background:none; border:none; cursor:pointer; padding:2px 4px; font-size:12px;
+    color: var(--ink); border-radius:4px; line-height:1;
+  }
+  .layer-item .layer-vis{ font-size:13px; }
+  .layer-item button:hover{ background: var(--accent-soft); }
 </style>
 </head>
 <body>
@@ -338,7 +355,7 @@
     </div>
     <div class="field">
       <div class="field-label-row"><label>Horizontale positie</label><span class="field-val" id="waveOffsetXVal">0px</span></div>
-      <input type="range" id="waveOffsetX" min="-1600" max="1600" value="0">
+      <input type="range" id="waveOffsetX" min="-4300" max="4300" value="0">
     </div>
     <div class="row">
       <button type="button" class="secondary" id="resetWavePosBtn" style="font-size:12px; padding:6px 10px;">Positie herstellen</button>
@@ -373,7 +390,17 @@
     </div>
     <input type="file" id="fileInput" accept="image/*">
     <div class="icon-list" id="iconList"></div>
-    <div class="hint">PNG's met transparante achtergrond werken direct. Klik een afbeelding aan en sleep de <b>bolletje-handle</b> rechtsonder om te vergroten/verkleinen.</div>
+    <div id="selectedIconSizePanel" class="field" style="display:none; margin-top:10px;">
+      <div class="field-label-row"><label>Grootte geselecteerde afbeelding</label><span class="field-val" id="selectedIconSizeVal">160px</span></div>
+      <input type="range" id="selectedIconSize" min="20" max="600" value="160">
+    </div>
+    <div class="hint">Klik een afbeelding aan om ze te selecteren — sleep haar rond (met magnetische hulplijnen op middens/randen), sleep de <b>bolletje-handle</b> rechtsonder om te schalen, of gebruik de schuif hierboven.</div>
+  </section>
+
+  <section>
+    <label>Lagen</label>
+    <div class="layer-list" id="layerList"></div>
+    <div class="hint">Bovenste laag = vooraan. Klik een naam om te selecteren, 👁 om te tonen/verbergen, ▲▼ om de volgorde te wijzigen.</div>
   </section>
 
   <section>
@@ -549,6 +576,8 @@ let draggingIcon = null;    // {id, offX, offY}
 let resizingIcon = null;    // {id, startW, startH, startPosX, aspect}
 let selectedPoint = null;   // {lineId, index}
 let selectedIconId = null;
+let activeSnapGuides = null; // {x: canvasXOrNull, y: canvasYOrNull} while dragging an icon
+const SNAP_THRESHOLD_SCREEN_PX = 8;
 let pickingColorForLineId = null; // fallback eyedropper mode
 let bgColor = '#F5D5DE';
 let strokeWidth = 7;
@@ -591,6 +620,13 @@ let waveOffsetX = 0;
 let draggingWave = null; // {startPosX, startPosY, startOffset, startBaselinePct}
 let lastAnimPos = null;
 
+// Draw order for everything on the canvas (manual lines, the wave
+// stroke, the wave text, every icon). Index 0 = back, last = front.
+let layers = [
+  {type:'waveline', visible:true},
+  {type:'wavetext', visible:true}
+];
+
 const EASINGS = {
   linear: u => u,
   easeInOut: u => u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u+2, 2)/2
@@ -604,6 +640,7 @@ function snapshotState(){
   return {
     lines: lines.map(l=>({id:l.id, color:l.color, finished:!!l.finished, points: l.points.map(p=>({x:p.x,y:p.y}))})),
     icons: icons.map(i=>({id:i.id, img:i.img, x:i.x, y:i.y, w:i.w, h:i.h})),
+    layers: layers.map(l=>({type:l.type, id:l.id, visible:l.visible})),
     activeLineId, bgColor, strokeWidth, lineCounter, iconCounter, animIconId
   };
 }
@@ -616,6 +653,7 @@ function undo(){
   const snap = history.pop();
   lines = snap.lines.map(l=>({id:l.id, color:l.color, finished:l.finished, points:l.points.map(p=>({x:p.x,y:p.y}))}));
   icons = snap.icons.map(i=>({id:i.id, img:i.img, x:i.x, y:i.y, w:i.w, h:i.h}));
+  layers = snap.layers ? snap.layers.map(l=>({type:l.type, id:l.id, visible:l.visible})) : layers;
   activeLineId = snap.activeLineId;
   bgColor = snap.bgColor;
   strokeWidth = snap.strokeWidth;
@@ -628,6 +666,8 @@ function undo(){
   selectedIconId = null;
   renderLineList();
   renderIconList();
+  renderLayerList();
+  syncSelectedIconSizeUI();
   updateModeBanner();
   draw();
 }
@@ -657,6 +697,7 @@ function renderLineList(){
       activeLineId = line.id;
       line.finished = false;
       renderLineList();
+      renderLayerList();
       updateModeBanner();
       draw();
     });
@@ -696,8 +737,10 @@ function renderLineList(){
       e.stopPropagation();
       pushHistory();
       lines = lines.filter(l=>l.id!=btn.dataset.id);
+      removeLayerFor('line', btn.dataset.id);
       if(activeLineId==btn.dataset.id) activeLineId = lines.length? lines[0].id : null;
       renderLineList();
+      renderLayerList();
       draw();
     });
   });
@@ -708,8 +751,10 @@ document.getElementById('addLine').addEventListener('click', ()=>{
   lineCounter++;
   const line = {id: lineCounter, color: newLineColor(), finished:false, points: []};
   lines.push(line);
+  addLayerFor('line', line.id);
   activeLineId = line.id;
   renderLineList();
+  renderLayerList();
   updateModeBanner();
   draw();
 });
@@ -746,7 +791,9 @@ document.getElementById('fileInput').addEventListener('change', (e)=>{
       const h = 160;
       const w = h * (img.width/img.height);
       icons.push({id: iconCounter, img, x: 60, y: 100 + icons.length*220, w, h});
+      addLayerFor('icon', iconCounter);
       renderIconList();
+      renderLayerList();
       draw();
     };
     img.src = ev.target.result;
@@ -769,9 +816,13 @@ function renderIconList(){
       pushHistory();
       const id = btn.dataset.id;
       icons = icons.filter(i=>i.id!=id);
+      removeLayerFor('icon', id);
       if(String(animIconId)===String(id)) animIconId = '';
+      if(String(selectedIconId)===String(id)) selectedIconId = null;
       renderIconList();
+      renderLayerList();
       refreshAnimIconSelect();
+      syncSelectedIconSizeUI();
       draw();
     });
   });
@@ -800,7 +851,9 @@ function refreshAnimIconSelect(){
 document.getElementById('animIconSelect').addEventListener('change', (e)=>{
   animIconId = e.target.value;
   renderIconList();
+  renderLayerList();
   syncAnimIconSizeUI();
+  syncSelectedIconSizeUI();
   draw();
 });
 
@@ -824,6 +877,33 @@ document.getElementById('animIconSize').addEventListener('input', (e)=>{
   icon.w = newW;
   icon.h = newW / aspect;
   document.getElementById('animIconSizeVal').textContent = Math.round(newW)+'px';
+  if(String(icon.id)===String(selectedIconId)) syncSelectedIconSizeUI();
+  draw();
+});
+
+// ---------- Selected-icon size control (works for ANY icon you click,
+// not just the one that's animating) ----------
+function syncSelectedIconSizeUI(){
+  const panel = document.getElementById('selectedIconSizePanel');
+  if(!panel) return;
+  const icon = icons.find(i=>String(i.id)===String(selectedIconId));
+  if(!icon){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+  document.getElementById('selectedIconSize').value = Math.round(icon.w);
+  document.getElementById('selectedIconSizeVal').textContent = Math.round(icon.w)+'px';
+}
+document.getElementById('selectedIconSize').addEventListener('input', (e)=>{
+  const icon = icons.find(i=>String(i.id)===String(selectedIconId));
+  if(!icon) return;
+  const newW = parseFloat(e.target.value);
+  const aspect = icon.w / icon.h;
+  icon.w = newW;
+  icon.h = newW / aspect;
+  document.getElementById('selectedIconSizeVal').textContent = Math.round(newW)+'px';
+  if(String(icon.id)===String(animIconId)) syncAnimIconSizeUI();
   draw();
 });
 
@@ -840,8 +920,9 @@ document.getElementById('strokeWidth').addEventListener('input', (e)=>{
 document.getElementById('clearBtn').addEventListener('click', ()=>{
   if(!confirm('Alles wissen? (tekst en golfinstellingen blijven staan, alleen lijnen/afbeeldingen worden gewist)')) return;
   pushHistory();
-  lines = []; icons = []; activeLineId = null; animIconId='';
-  renderLineList(); renderIconList(); updateModeBanner(); draw();
+  lines = []; icons = []; activeLineId = null; animIconId=''; selectedIconId = null;
+  layers = layers.filter(l=> l.type==='waveline' || l.type==='wavetext');
+  renderLineList(); renderIconList(); renderLayerList(); syncSelectedIconSizeUI(); updateModeBanner(); draw();
 });
 
 // ---------- Wave / text-on-path controls wiring ----------
@@ -982,16 +1063,21 @@ function buildWavePath(){
   const xs = new Float64Array(N+1);
   const ys = new Float64Array(N+1);
   const ss = new Float64Array(N+1);
-  // waveOffsetX shifts the wave's x-input, so dragging moves the whole
-  // curve (same shape) left/right as a rigid unit, instead of revealing
-  // a different-looking slice of the underlying periodic sine.
+  // Compute the wave's shape in "local" coordinates first (the sine's
+  // input is never touched by waveOffsetX), then shift the whole
+  // resulting shape sideways by waveOffsetX. That makes dragging a
+  // true rigid-body translation — the shape itself never distorts,
+  // and (since text/icon always start at the shape's own s=0) it
+  // actually carries the text along instead of leaving it pinned at
+  // the canvas edge.
   for(let i=0;i<=N;i++){
-    const x = i*dx;
-    const y = baselineY + amp*Math.sin((2*Math.PI*(x - waveOffsetX)/wl) + phaseRad);
-    xs[i] = x; ys[i] = y;
-    ss[i] = i===0 ? 0 : ss[i-1] + Math.hypot(x-xs[i-1], y-ys[i-1]);
+    const localX = i*dx;
+    const y = baselineY + amp*Math.sin((2*Math.PI*localX/wl) + phaseRad);
+    xs[i] = localX + waveOffsetX;
+    ys[i] = y;
+    ss[i] = i===0 ? 0 : ss[i-1] + Math.hypot(xs[i]-xs[i-1], y-ys[i-1]);
   }
-  return {xs, ys, ss, totalLength: ss[N], dx, N};
+  return {xs, ys, ss, totalLength: ss[N], dx, N, offsetX: waveOffsetX};
 }
 
 function posAtArcLength(path, s){
@@ -1011,7 +1097,9 @@ function posAtArcLength(path, s){
 }
 
 function arcLengthAtX(path, x){
-  const idx = Math.max(0, Math.min(path.N, Math.round(x/path.dx)));
+  // xs[i] = i*dx + offsetX, so invert that to find the sample index.
+  const localX = x - (path.offsetX || 0);
+  const idx = Math.max(0, Math.min(path.N, Math.round(localX/path.dx)));
   return path.ss[idx];
 }
 
@@ -1111,39 +1199,130 @@ function renderSceneAt(ctx, animT, offsetX, w, h, path){
   ctx.save();
   ctx.translate(-offsetX, 0);
 
-  lines.forEach(line=> drawSmoothLine(ctx, line.points, line.color, strokeWidth));
-
-  icons.forEach(icon=>{
-    if(String(icon.id)===String(animIconId)) return;
-    ctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
-  });
-
-  if(waveVisible){
-    drawWaveStroke(ctx, path, waveColor, waveThickness);
-  }
-  if(waveText){
-    drawTextOnPath(ctx, path, {
-      text: waveText, fontCss: buildFontCss(), color: waveTextColor,
-      letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: 0
-    });
-  }
-
   let animPos = null;
-  const icon = getAnimIcon();
-  if(icon){
-    const u = easedProgressAt(animT);
-    const s = u * path.totalLength;
-    const pos = posAtArcLength(path, s);
-    ctx.save();
-    ctx.translate(pos.x, pos.y);
-    if(animRotate) ctx.rotate(pos.angle);
-    ctx.drawImage(icon.img, -icon.w/2, -icon.h/2, icon.w, icon.h);
-    ctx.restore();
-    animPos = {x: pos.x - offsetX, y: pos.y, w: icon.w, h: icon.h};
-  }
+
+  layers.forEach(layer=>{
+    if(!layer.visible) return;
+    if(layer.type === 'line'){
+      const line = lines.find(l=>l.id===layer.id);
+      if(line) drawSmoothLine(ctx, line.points, line.color, strokeWidth);
+    } else if(layer.type === 'waveline'){
+      if(waveVisible) drawWaveStroke(ctx, path, waveColor, waveThickness);
+    } else if(layer.type === 'wavetext'){
+      if(waveText){
+        drawTextOnPath(ctx, path, {
+          text: waveText, fontCss: buildFontCss(), color: waveTextColor,
+          letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: 0
+        });
+      }
+    } else if(layer.type === 'icon'){
+      const icon = icons.find(i=>i.id===layer.id);
+      if(!icon) return;
+      if(String(icon.id)===String(animIconId)){
+        const u = easedProgressAt(animT);
+        const s = u * path.totalLength;
+        const pos = posAtArcLength(path, s);
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        if(animRotate) ctx.rotate(pos.angle);
+        ctx.drawImage(icon.img, -icon.w/2, -icon.h/2, icon.w, icon.h);
+        ctx.restore();
+        animPos = {x: pos.x - offsetX, y: pos.y, w: icon.w, h: icon.h};
+      } else {
+        ctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
+      }
+    }
+  });
 
   ctx.restore();
   return animPos;
+}
+
+// ---------- Layers ----------
+// A single ordered list drives z-order for everything drawn: manual
+// lines, the wave stroke, the wave text, and every icon (including
+// whichever one is currently animating). Index 0 = back, last = front.
+function layerLabel(layer){
+  if(layer.type==='wavetext') return 'Tekst (golflijn)';
+  if(layer.type==='waveline') return 'Lijn (golf-omtrek)';
+  if(layer.type==='line'){
+    const idx = lines.findIndex(l=>l.id===layer.id);
+    return 'Losse lijn ' + (idx>=0 ? idx+1 : '?');
+  }
+  if(layer.type==='icon'){
+    const idx = icons.findIndex(i=>i.id===layer.id);
+    const isAnim = String(layer.id)===String(animIconId);
+    return 'Afbeelding ' + (idx>=0 ? idx+1 : '?') + (isAnim ? ' (animeert)' : '');
+  }
+  return '?';
+}
+
+function addLayerFor(type, id){
+  layers.push({type, id, visible:true});
+}
+function removeLayerFor(type, id){
+  layers = layers.filter(l=> !(l.type===type && String(l.id)===String(id)));
+}
+function moveLayer(arrIdx, dir){
+  const j = arrIdx + dir;
+  if(j<0 || j>=layers.length) return;
+  const tmp = layers[arrIdx];
+  layers[arrIdx] = layers[j];
+  layers[j] = tmp;
+  renderLayerList();
+  draw();
+}
+
+function renderLayerList(){
+  const el = document.getElementById('layerList');
+  if(!el) return;
+  el.innerHTML = '';
+  // Front-most layer shown at the top of the panel (reverse of draw order).
+  for(let arrIdx = layers.length-1; arrIdx>=0; arrIdx--){
+    const layer = layers[arrIdx];
+    const row = document.createElement('div');
+    row.className = 'layer-item';
+    const isSelected =
+      (layer.type==='icon' && String(layer.id)===String(selectedIconId)) ||
+      (layer.type==='line' && String(layer.id)===String(activeLineId));
+    if(isSelected) row.classList.add('selected');
+    row.innerHTML = `
+      <button class="layer-vis" data-idx="${arrIdx}" title="Tonen/verbergen">${layer.visible ? '👁' : '🚫'}</button>
+      <span class="layer-label">${layerLabel(layer)}</span>
+      <button class="layer-move" data-idx="${arrIdx}" data-dir="1" title="Naar voren">▲</button>
+      <button class="layer-move" data-idx="${arrIdx}" data-dir="-1" title="Naar achteren">▼</button>
+    `;
+    row.querySelector('.layer-label').addEventListener('click', ()=>{
+      if(layer.type==='icon'){
+        selectedIconId = layer.id;
+        syncSelectedIconSizeUI();
+      } else if(layer.type==='line'){
+        activeLineId = layer.id;
+        const line = lines.find(l=>l.id===layer.id);
+        if(line) line.finished = false;
+        renderLineList();
+        updateModeBanner();
+      }
+      renderLayerList();
+      draw();
+    });
+    el.appendChild(row);
+  }
+  el.querySelectorAll('.layer-vis').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = parseInt(btn.dataset.idx);
+      layers[idx].visible = !layers[idx].visible;
+      renderLayerList();
+      draw();
+    });
+  });
+  el.querySelectorAll('.layer-move').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = parseInt(btn.dataset.idx);
+      const dir = parseInt(btn.dataset.dir);
+      moveLayer(idx, dir);
+    });
+  });
 }
 
 // ---------- Draw ----------
@@ -1219,12 +1398,34 @@ function draw(){
       octx.stroke();
     }
   });
+
+  if(activeSnapGuides){
+    octx.save();
+    octx.strokeStyle = '#C05B3C';
+    octx.lineWidth = 2;
+    octx.setLineDash([4,4]);
+    if(activeSnapGuides.x !== null){
+      octx.beginPath();
+      octx.moveTo(activeSnapGuides.x, 0);
+      octx.lineTo(activeSnapGuides.x, FULL_H);
+      octx.stroke();
+    }
+    if(activeSnapGuides.y !== null){
+      octx.beginPath();
+      octx.moveTo(0, activeSnapGuides.y);
+      octx.lineTo(FULL_W, activeSnapGuides.y);
+      octx.stroke();
+    }
+    octx.restore();
+  }
 }
 document.getElementById('bgColor').value = bgColor;
 document.getElementById('waveStrokeFields').style.display = waveVisible ? '' : 'none';
 draw();
 renderLineList();
 renderIconList();
+renderLayerList();
+syncSelectedIconSizeUI();
 updateModeBanner();
 
 // Custom web fonts (Montserrat, League Spartan) load asynchronously —
@@ -1283,6 +1484,69 @@ function hitTestIconHandle(pos){
   }
   return Math.hypot(pos.x-hx, pos.y-hy) < 30;
 }
+// ---------- Magnetic snap guides for dragging icons ----------
+function applyIconSnap(icon, x, y){
+  const scale = baseScale * zoomFactor;
+  const threshold = SNAP_THRESHOLD_SCREEN_PX / Math.max(0.001, scale);
+
+  const w = icon.w, h = icon.h;
+  const slideIdx = Math.max(0, Math.min(N_SLIDES-1, Math.floor((x + w/2) / SLIDE_W)));
+  const slideLeft = slideIdx*SLIDE_W, slideRight = slideLeft+SLIDE_W;
+
+  const xTargets = [
+    {v: slideLeft + SLIDE_W/2, kind:'center'},
+    {v: slideLeft, kind:'edge'},
+    {v: slideRight, kind:'edge'}
+  ];
+  const yTargets = [
+    {v: FULL_H/2, kind:'center'},
+    {v: (waveBaselinePct/100)*FULL_H, kind:'edge'}
+  ];
+  icons.forEach(other=>{
+    if(other.id===icon.id || String(other.id)===String(animIconId)) return;
+    xTargets.push({v:other.x, kind:'edge'}, {v:other.x+other.w, kind:'edge'}, {v:other.x+other.w/2, kind:'center'});
+    yTargets.push({v:other.y, kind:'edge'}, {v:other.y+other.h, kind:'edge'}, {v:other.y+other.h/2, kind:'center'});
+  });
+
+  const candidatesX = [
+    {feature:'left', val:x}, {feature:'center', val:x+w/2}, {feature:'right', val:x+w}
+  ];
+  const candidatesY = [
+    {feature:'top', val:y}, {feature:'center', val:y+h/2}, {feature:'bottom', val:y+h}
+  ];
+
+  let bestX = null, bestXDelta = threshold;
+  candidatesX.forEach(c=>{
+    xTargets.forEach(t=>{
+      const d = Math.abs(c.val - t.v);
+      if(d < bestXDelta){ bestXDelta = d; bestX = {feature:c.feature, target:t.v}; }
+    });
+  });
+  let bestY = null, bestYDelta = threshold;
+  candidatesY.forEach(c=>{
+    yTargets.forEach(t=>{
+      const d = Math.abs(c.val - t.v);
+      if(d < bestYDelta){ bestYDelta = d; bestY = {feature:c.feature, target:t.v}; }
+    });
+  });
+
+  let newX = x, newY = y;
+  const guides = {x:null, y:null};
+  if(bestX){
+    if(bestX.feature==='left') newX = bestX.target;
+    else if(bestX.feature==='right') newX = bestX.target - w;
+    else newX = bestX.target - w/2;
+    guides.x = bestX.target;
+  }
+  if(bestY){
+    if(bestY.feature==='top') newY = bestY.target;
+    else if(bestY.feature==='bottom') newY = bestY.target - h;
+    else newY = bestY.target - h/2;
+    guides.y = bestY.target;
+  }
+  return {x:newX, y:newY, guides};
+}
+
 function sampleColorAt(pos){
   const x = Math.round(Math.max(0, Math.min(FULL_W-1, pos.x)));
   const y = Math.round(Math.max(0, Math.min(FULL_H-1, pos.y)));
@@ -1313,6 +1577,7 @@ overlay.addEventListener('mousedown', (e)=>{
     draggingPoint = ptHit;
     selectedPoint = ptHit;
     selectedIconId = null;
+    syncSelectedIconSizeUI();
     draw();
     return;
   }
@@ -1328,6 +1593,8 @@ overlay.addEventListener('mousedown', (e)=>{
   if(iconHit){
     pushHistory();
     selectedIconId = iconHit;
+    syncSelectedIconSizeUI();
+    renderLayerList();
     const icon = icons.find(i=>i.id===iconHit);
     draggingIcon = {id: iconHit, offX: pos.x-icon.x, offY: pos.y-icon.y};
     draw();
@@ -1336,6 +1603,7 @@ overlay.addEventListener('mousedown', (e)=>{
 
   // clicked empty space
   selectedIconId = null;
+  syncSelectedIconSizeUI();
   if(activeLineId){
     const line = lines.find(l=>l.id===activeLineId);
     if(line && !line.finished){
@@ -1375,8 +1643,12 @@ window.addEventListener('mousemove', (e)=>{
     draw();
   } else if(draggingIcon){
     const icon = icons.find(i=>i.id===draggingIcon.id);
-    icon.x = pos.x - draggingIcon.offX;
-    icon.y = pos.y - draggingIcon.offY;
+    let x = pos.x - draggingIcon.offX;
+    let y = pos.y - draggingIcon.offY;
+    const snapped = applyIconSnap(icon, x, y);
+    icon.x = snapped.x;
+    icon.y = snapped.y;
+    activeSnapGuides = snapped.guides;
     draw();
   } else if(resizingIcon){
     const icon = icons.find(i=>i.id===resizingIcon.id);
@@ -1386,6 +1658,7 @@ window.addEventListener('mousemove', (e)=>{
     icon.w = newW;
     icon.h = newH;
     if(String(icon.id)===String(animIconId)) syncAnimIconSizeUI();
+    if(String(icon.id)===String(selectedIconId)) syncSelectedIconSizeUI();
     draw();
   }
 });
@@ -1393,6 +1666,7 @@ window.addEventListener('mouseup', ()=>{
   draggingPoint = null;
   draggingIcon = null;
   resizingIcon = null;
+  activeSnapGuides = null;
   if(draggingWave){ draggingWave = null; overlay.style.cursor = activeLineId ? 'crosshair' : 'grab'; }
 });
 
