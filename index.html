@@ -3902,14 +3902,22 @@ async function pickWebCodecsCodec(w, h){
     ...H264_CANDIDATES.map(c=>({webCodecsCodec:c, muxerCodec:'avc', label:'H.264'})),
     {webCodecsCodec:'vp09.00.10.08', muxerCodec:'vp9', label:'VP9'}
   ];
+  // Hardware H.264/VP9 encoders on some machines silently ignore the
+  // requested bitrate and fall back to a much lower default (this is
+  // what caused the soft/blurry export) — software encoding respects
+  // it properly, so it's tried first. If software isn't available for
+  // a given codec, this still falls back to whatever the browser has.
+  const hwPrefs = ['prefer-software', 'no-preference'];
   for(const c of candidates){
-    try{
-      const support = await VideoEncoder.isConfigSupported({
-        codec: c.webCodecsCodec, width: w, height: h, bitrate: EXPORT_BITRATE, framerate: 30,
-        bitrateMode: 'constant', latencyMode: 'quality'
-      });
-      if(support && support.supported) return c;
-    } catch(err){ /* try next */ }
+    for(const hardwareAcceleration of hwPrefs){
+      try{
+        const support = await VideoEncoder.isConfigSupported({
+          codec: c.webCodecsCodec, width: w, height: h, bitrate: EXPORT_BITRATE, framerate: 30,
+          bitrateMode: 'constant', latencyMode: 'quality', hardwareAcceleration
+        });
+        if(support && support.supported) return {...c, hardwareAcceleration};
+      } catch(err){ /* try next */ }
+    }
   }
   return null;
 }
@@ -3943,6 +3951,7 @@ async function recordSlideWebCodecs(index, path, tEnterList, tEndAll, caches, co
     bitrate: EXPORT_BITRATE,
     bitrateMode: 'constant',
     latencyMode: 'quality',
+    hardwareAcceleration: codec.hardwareAcceleration || 'prefer-software',
     framerate: FPS
   });
 
