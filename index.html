@@ -2710,9 +2710,16 @@ document.getElementById('fileInput').addEventListener('change', (e)=>{
     img.onload = ()=>{
       pushHistory();
       iconCounter++;
-      const h = 160;
-      const w = h * (img.width/img.height);
-      icons.push({id: iconCounter, img, x: 60, y: 100 + icons.length*220, w, h});
+      // Fit the image large within a single slide (not a tiny corner
+      // thumbnail) so it's immediately usable — cap by both width and
+      // height so tall/wide images both fit inside one slide's bounds.
+      const maxW = SLIDE_W * 0.85, maxH = SLIDE_H * 0.85;
+      const aspect = img.width / img.height;
+      let w = maxW, h = w / aspect;
+      if(h > maxH){ h = maxH; w = h * aspect; }
+      const x = (SLIDE_W - w) / 2;
+      const y = (SLIDE_H - h) / 2;
+      icons.push({id: iconCounter, img, x, y, w, h});
       addLayerFor('icon', iconCounter);
       renderIconList();
       renderLayerList();
@@ -3397,12 +3404,22 @@ function hitTestPoint(pos){
 function hitTestIcon(pos){
   for(let i=icons.length-1;i>=0;i--){
     const icon = icons[i];
-    if(String(icon.id)===String(animIconId)) continue; // animated icon isn't draggable
+    if(String(icon.id)===String(animIconId)) continue; // animated icon moves the line itself instead — see hitTestAnimIcon
     if(pos.x>=icon.x && pos.x<=icon.x+icon.w && pos.y>=icon.y && pos.y<=icon.y+icon.h){
       return icon.id;
     }
   }
   return null;
+}
+// The animating icon's position always comes from the wave path, so
+// "dragging" it means dragging the path (same as grabbing the text) —
+// this makes that explicit and gives it its own generous hit area
+// instead of silently falling through to "clicked empty space".
+function hitTestAnimIcon(pos){
+  if(!animIconId || !lastAnimPos) return false;
+  const pad = 20;
+  return pos.x >= lastAnimPos.x - pad && pos.x <= lastAnimPos.x + lastAnimPos.w + pad &&
+         pos.y >= lastAnimPos.y - pad && pos.y <= lastAnimPos.y + lastAnimPos.h + pad;
 }
 function hitTestIconHandle(pos){
   if(!selectedIconId) return false;
@@ -3530,6 +3547,19 @@ overlay.addEventListener('mousedown', (e)=>{
     renderLayerList();
     const icon = icons.find(i=>i.id===iconHit);
     draggingIcon = {id: iconHit, offX: pos.x-icon.x, offY: pos.y-icon.y};
+    draw();
+    return;
+  }
+
+  if(hitTestAnimIcon(pos)){
+    selectedIconId = animIconId;
+    syncSelectedIconSizeUI();
+    renderLayerList();
+    draggingWave = {
+      startPosX: pos.x, startPosY: pos.y,
+      startOffset: waveOffsetX, startBaselinePct: waveBaselinePct
+    };
+    overlay.style.cursor = 'grabbing';
     draw();
     return;
   }
@@ -3894,7 +3924,7 @@ function renderCachedFrame(ctx, caches, animT, offsetX, w, h, path){
 // speed can only affect how long *export* takes, never the smoothness
 // of the resulting video.
 const H264_CANDIDATES = ['avc1.640028','avc1.4d0028','avc1.42001f'];
-const EXPORT_BITRATE = 30_000_000; // generous — these are short single-slide clips, file size isn't a concern, sharpness is
+const EXPORT_BITRATE = 60_000_000; // very generous — short single-slide clips, sharpness matters far more than file size
 
 async function pickWebCodecsCodec(w, h){
   if(!window.VideoEncoder || !window.Mp4Muxer) return null;
@@ -3913,7 +3943,7 @@ async function pickWebCodecsCodec(w, h){
       try{
         const support = await VideoEncoder.isConfigSupported({
           codec: c.webCodecsCodec, width: w, height: h, bitrate: EXPORT_BITRATE, framerate: 30,
-          bitrateMode: 'constant', latencyMode: 'quality', hardwareAcceleration
+          bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration
         });
         if(support && support.supported) return {...c, hardwareAcceleration};
       } catch(err){ /* try next */ }
@@ -3949,7 +3979,7 @@ async function recordSlideWebCodecs(index, path, tEnterList, tEndAll, caches, co
     width: SLIDE_W,
     height: SLIDE_H,
     bitrate: EXPORT_BITRATE,
-    bitrateMode: 'constant',
+    bitrateMode: 'variable',
     latencyMode: 'quality',
     hardwareAcceleration: codec.hardwareAcceleration || 'prefer-software',
     framerate: FPS
