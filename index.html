@@ -177,6 +177,50 @@
   }
   .icon-item img{ width:26px; height:26px; object-fit:cover; border-radius:4px; border:1px solid var(--line); }
   .icon-item .del{ margin-left:auto; background:none; border:none; color:#b08a6f; cursor:pointer; font-size:15px;}
+  .icon-item.is-anim{ background:#FFF6EF; border-radius:6px; padding:4px 6px; margin:-4px -6px; }
+  .icon-item .anim-tag{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--accent); border:1px solid var(--accent-soft); border-radius:8px; padding:1px 6px; }
+  .field{ margin-bottom:12px; }
+  .field:last-child{ margin-bottom:0; }
+  .field-label-row{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .field-label-row label{ margin:0; }
+  .field-val{ font-family:-apple-system, BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11.5px; color:#a08d76; }
+  textarea, select, input[type=text], input[type=number]{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    width:100%;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 7px 9px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  textarea{ resize:vertical; min-height:44px; font-size:14px; }
+  .inline-num{ width:70px !important; display:inline-block; }
+  .check-row{ display:flex; align-items:center; gap:7px; font-family:-apple-system, BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:12.5px; margin-bottom:8px; }
+  .check-row input{ margin:0; }
+  .preset-row{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .preset-btn{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11.5px;
+    padding: 6px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .preset-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .play-row{ display:flex; align-items:center; gap:10px; }
+  #playBtn{ width:38px; height:38px; border-radius:50%; padding:0; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:14px;}
+  #scrub{ flex:1; }
+  #exportStatus{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    color: #8a7862;
+    min-height: 16px;
+    margin-top: 8px;
+  }
 </style>
 </head>
 <body>
@@ -184,16 +228,93 @@
 <div id="sidebar">
   <div>
     <h1>Kronkellijn Tool</h1>
-    <div class="sub">Teken golvende lijnen over 4 Instagram-slides heen. Klik op het canvas om punten toe te voegen, sleep om aan te passen.</div>
+    <div class="sub">Zet tekst op een vloeiende golvende lijn over 4 Instagram-slides heen, en laat een icoontje die lijn volgen als animatie.</div>
   </div>
 
   <section>
-    <label>Lijnen</label>
+    <label>Tekst op golvende lijn</label>
+    <div class="field">
+      <textarea id="waveText" placeholder="Typ hier je tekst…">Les Deux</textarea>
+    </div>
+    <div class="check-row">
+      <input type="checkbox" id="waveRepeat" checked>
+      <label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px;" for="waveRepeat">Herhaal tekst om de hele breedte te vullen</label>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <div class="field-label-row"><label>Lettertype</label></div>
+        <select id="waveFontFamily">
+          <option value="Georgia, 'Iowan Old Style', serif" selected>Georgia (serif)</option>
+          <option value="'Times New Roman', serif">Times</option>
+          <option value="Arial, sans-serif">Arial</option>
+          <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+          <option value="Impact, sans-serif">Impact</option>
+          <option value="'Courier New', monospace">Courier</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="field-label-row"><label>Kleur</label></div>
+        <input type="color" id="waveTextColor" value="#ffffff">
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Tekstgrootte</label><span class="field-val" id="waveFontSizeVal">64px</span></div>
+      <input type="range" id="waveFontSize" min="20" max="160" value="64">
+    </div>
+    <div class="check-row">
+      <input type="checkbox" id="waveBold" checked>
+      <label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px;" for="waveBold">Vet</label>
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Letterspatiëring</label><span class="field-val" id="waveLetterSpacingVal">2px</span></div>
+      <input type="range" id="waveLetterSpacing" min="-4" max="30" value="2">
+    </div>
+  </section>
+
+  <section>
+    <label>Golfpatroon</label>
+    <div class="preset-row">
+      <button type="button" class="preset-btn" data-amp="30" data-wl="1400">Subtiel</button>
+      <button type="button" class="preset-btn" data-amp="90" data-wl="850">Golvend</button>
+      <button type="button" class="preset-btn" data-amp="150" data-wl="520">Speels</button>
+      <button type="button" class="preset-btn" data-amp="0" data-wl="1000">Recht</button>
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Amplitude (hoogte golf)</label><span class="field-val" id="waveAmplitudeVal">90px</span></div>
+      <input type="range" id="waveAmplitude" min="0" max="260" value="90">
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Golflengte</label><span class="field-val" id="waveWavelengthVal">850px</span></div>
+      <input type="range" id="waveWavelength" min="200" max="2400" value="850">
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Fase (verschuiven)</label><span class="field-val" id="wavePhaseVal">0°</span></div>
+      <input type="range" id="wavePhase" min="0" max="360" value="0">
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Verticale positie</label><span class="field-val" id="waveBaselineVal">50%</span></div>
+      <input type="range" id="waveBaseline" min="0" max="100" value="45">
+    </div>
+    <div class="check-row">
+      <input type="checkbox" id="waveVisible">
+      <label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px;" for="waveVisible">Toon de lijn zelf (niet alleen de tekst)</label>
+    </div>
+    <div class="field" id="waveStrokeFields" style="display:none;">
+      <div class="grid2">
+        <input type="color" id="waveColor" value="#ffffff">
+        <input type="range" id="waveThickness" min="2" max="20" value="6">
+      </div>
+    </div>
+    <div class="hint">De golf is wiskundig (sinus-gebaseerd) dus altijd perfect vloeiend — geen handmatig geklik meer nodig.</div>
+  </section>
+
+  <section>
+    <label>Lijnen (los, decoratief)</label>
     <div class="row">
       <button id="addLine">+ Nieuwe lijn</button>
     </div>
     <div class="line-list" id="lineList"></div>
-    <div class="hint">Selecteer een lijn, klik dan op het canvas om er punten aan toe te voegen (van links naar rechts). Sleep bestaande punten om de golf te verfijnen. Klik op een punt + Delete om te verwijderen. Klik 💧 om een kleur uit een afbeelding over te nemen. Druk op <b>Enter</b> om de lijn af te ronden (bolletjes verdwijnen). <b>Ctrl+Z</b> (Cmd+Z op Mac) om een stap terug te gaan.</div>
+    <div class="hint">Optioneel: los van de golftekst hierboven kan je hier nog handmatige lijntjes toevoegen. Selecteer een lijn, klik op het canvas om punten toe te voegen. Druk <b>Enter</b> om af te ronden, <b>Ctrl+Z</b> voor ongedaan maken.</div>
   </section>
 
   <section>
@@ -203,7 +324,45 @@
     </div>
     <input type="file" id="fileInput" accept="image/*">
     <div class="icon-list" id="iconList"></div>
-    <div class="hint">PNG's met transparante achtergrond werken direct. Sleep een afbeelding naar het begin van de bijpassende lijn. Klik een afbeelding aan en sleep de <b>bolletje-handle</b> rechtsonder om te vergroten/verkleinen.</div>
+    <div class="hint">PNG's met transparante achtergrond werken direct. Klik een afbeelding aan en sleep de <b>bolletje-handle</b> rechtsonder om te vergroten/verkleinen.</div>
+  </section>
+
+  <section>
+    <label>Animatie</label>
+    <div class="field">
+      <div class="field-label-row"><label>Animerend icoon</label></div>
+      <select id="animIconSelect"><option value="">— geen —</option></select>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <div class="field-label-row"><label>Duur</label><span class="field-val" id="animDurationVal">5.0s</span></div>
+        <input type="range" id="animDuration" min="1" max="15" step="0.1" value="5">
+      </div>
+      <div class="field">
+        <div class="field-label-row"><label>Vasthouden op eind</label><span class="field-val" id="animHoldVal">1.0s</span></div>
+        <input type="range" id="animHold" min="0" max="5" step="0.1" value="1">
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Vertraging bij start</label><span class="field-val" id="animDelayVal">0.0s</span></div>
+      <input type="range" id="animDelay" min="0" max="3" step="0.1" value="0">
+    </div>
+    <div class="field">
+      <div class="field-label-row"><label>Beweging</label></div>
+      <select id="animEasing">
+        <option value="linear" selected>Lineair (gelijkmatig — beste voor naadloze slides)</option>
+        <option value="easeInOut">Ease in/out (rustig starten en stoppen)</option>
+      </select>
+    </div>
+    <div class="check-row">
+      <input type="checkbox" id="animRotate">
+      <label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px;" for="animRotate">Icoon meeroteren met de lijn</label>
+    </div>
+    <div class="play-row">
+      <button class="secondary" id="playBtn">▶</button>
+      <input type="range" id="scrub" min="0" max="1000" value="0">
+    </div>
+    <div class="hint">Kies hierboven welke afbeelding meebeweegt over de golvende lijn. Speel af om de beweging te bekijken voor je exporteert.</div>
   </section>
 
   <section>
@@ -215,7 +374,7 @@
   </section>
 
   <section>
-    <label>Lijndikte</label>
+    <label>Lijndikte (losse lijnen)</label>
     <input type="range" id="strokeWidth" min="3" max="18" value="7">
   </section>
 
@@ -231,11 +390,19 @@
   </section>
 
   <section>
+    <label>Exporteren</label>
     <div class="row">
-      <button class="accent" id="exportBtn">Exporteer 4 slides</button>
+      <button class="accent" id="exportBtn">Exporteer 4 slides (PNG)</button>
+    </div>
+    <div class="hint">Downloadt 4 losse PNG's (1080×1350), precies zoals nu op het canvas te zien is.</div>
+    <div class="row" style="margin-top:10px;">
+      <button class="accent" id="exportVideoBtn">Exporteer 4 slides (video)</button>
+    </div>
+    <div class="hint">Elke slide-video start precies op het moment dat het icoon links in beeld komt — bij het doorswipen op Instagram lijkt de animatie zo naadloos door te lopen. Output is WebM; stuur de bestanden door als je ze als MP4 nodig hebt.</div>
+    <div id="exportStatus"></div>
+    <div class="row" style="margin-top:10px;">
       <button class="secondary" id="clearBtn">Alles wissen</button>
     </div>
-    <div class="hint">Downloadt 4 losse PNG's (1080×1350) klaar voor Instagram, in volgorde.</div>
   </section>
 </div>
 
@@ -315,16 +482,48 @@ let strokeWidth = 7;
 let lineCounter = 0;
 let iconCounter = 0;
 
-// ---------- Undo history ----------
+// ---------- Wave / text-on-path state ----------
+let waveText = 'Les Deux';
+let waveRepeat = true;
+let waveFontFamily = "Georgia, 'Iowan Old Style', serif";
+let waveFontSize = 64;
+let waveBold = true;
+let waveTextColor = '#ffffff';
+let waveLetterSpacing = 2;
+let waveAmplitude = 90;
+let waveWavelength = 850;
+let wavePhase = 0; // degrees
+let waveBaselinePct = 45; // % of height
+let waveVisible = false;
+let waveColor = '#ffffff';
+let waveThickness = 6;
+
+// ---------- Animation state ----------
+let animIconId = '';
+let animDuration = 5.0;
+let animDelay = 0.0;
+let animHold = 1.0;
+let animEasing = 'linear';
+let animRotate = false;
+let previewT = 0;
+let previewPlaying = false;
+let previewStartPerf = null;
+let previewStartT = 0;
+
+const EASINGS = {
+  linear: u => u,
+  easeInOut: u => u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u+2, 2)/2
+};
+
+// ---------- Undo history (lines & icons & background/stroke only) ----------
 let history = [];
 const HISTORY_LIMIT = 80;
-let historyLocked = false; // avoids stacking snapshots mid-drag
 
 function snapshotState(){
   return {
     lines: lines.map(l=>({id:l.id, color:l.color, finished:!!l.finished, points: l.points.map(p=>({x:p.x,y:p.y}))})),
     icons: icons.map(i=>({id:i.id, img:i.img, x:i.x, y:i.y, w:i.w, h:i.h})),
-    activeLineId, bgColor, strokeWidth, lineCounter, iconCounter
+    activeLineId, bgColor, strokeWidth, lineCounter, iconCounter, animIconId
   };
 }
 function pushHistory(){
@@ -341,6 +540,7 @@ function undo(){
   strokeWidth = snap.strokeWidth;
   lineCounter = snap.lineCounter;
   iconCounter = snap.iconCounter;
+  animIconId = snap.animIconId || '';
   document.getElementById('bgColor').value = bgColor;
   document.getElementById('strokeWidth').value = strokeWidth;
   selectedPoint = null;
@@ -443,7 +643,7 @@ function updateModeBanner(){
     const idx = lines.findIndex(l=>l.id===activeLineId)+1;
     banner.innerHTML = `Actief: <b>Lijn ${idx}</b> — klik op het canvas om een punt toe te voegen. Druk op <b>Enter</b> als je klaar bent.`;
   } else {
-    banner.textContent = lines.length ? 'Klik op een lijn in de lijst om verder te bewerken, of maak een nieuwe lijn.' : 'Maak eerst een lijn aan met "+ Nieuwe lijn".';
+    banner.textContent = 'Tekst en golf stel je in via de zijbalk. Losse handmatige lijnen (optioneel) maak je hier met "+ Nieuwe lijn".';
   }
 }
 
@@ -476,19 +676,48 @@ function renderIconList(){
   el.innerHTML = '';
   icons.forEach(icon=>{
     const row = document.createElement('div');
-    row.className = 'icon-item';
-    row.innerHTML = `<img src="${icon.img.src}"><span>Afbeelding ${icons.indexOf(icon)+1}</span><button class="del" data-id="${icon.id}">✕</button>`;
+    const isAnim = String(icon.id)===String(animIconId);
+    row.className = 'icon-item' + (isAnim ? ' is-anim' : '');
+    row.innerHTML = `<img src="${icon.img.src}"><span>Afbeelding ${icons.indexOf(icon)+1}</span>${isAnim ? '<span class="anim-tag">animeert</span>' : ''}<button class="del" data-id="${icon.id}">✕</button>`;
     el.appendChild(row);
   });
   el.querySelectorAll('.del').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       pushHistory();
-      icons = icons.filter(i=>i.id!=btn.dataset.id);
+      const id = btn.dataset.id;
+      icons = icons.filter(i=>i.id!=id);
+      if(String(animIconId)===String(id)) animIconId = '';
       renderIconList();
+      refreshAnimIconSelect();
       draw();
     });
   });
+  refreshAnimIconSelect();
 }
+
+function refreshAnimIconSelect(){
+  const sel = document.getElementById('animIconSelect');
+  const prev = animIconId;
+  sel.innerHTML = '<option value="">— geen —</option>';
+  icons.forEach((icon, idx)=>{
+    const opt = document.createElement('option');
+    opt.value = icon.id;
+    opt.textContent = 'Afbeelding ' + (idx+1);
+    sel.appendChild(opt);
+  });
+  if(icons.find(i=>String(i.id)===String(prev))){
+    sel.value = prev;
+    animIconId = prev;
+  } else {
+    sel.value = '';
+    animIconId = '';
+  }
+}
+document.getElementById('animIconSelect').addEventListener('change', (e)=>{
+  animIconId = e.target.value;
+  renderIconList();
+  draw();
+});
 
 document.getElementById('bgColor').addEventListener('mousedown', ()=> pushHistory());
 document.getElementById('bgColor').addEventListener('input', (e)=>{
@@ -501,11 +730,102 @@ document.getElementById('strokeWidth').addEventListener('input', (e)=>{
   draw();
 });
 document.getElementById('clearBtn').addEventListener('click', ()=>{
-  if(!confirm('Alles wissen?')) return;
+  if(!confirm('Alles wissen? (tekst en golfinstellingen blijven staan, alleen lijnen/afbeeldingen worden gewist)')) return;
   pushHistory();
-  lines = []; icons = []; activeLineId = null;
+  lines = []; icons = []; activeLineId = null; animIconId='';
   renderLineList(); renderIconList(); updateModeBanner(); draw();
 });
+
+// ---------- Wave / text-on-path controls wiring ----------
+function bindRange(id, valId, fmt, onChange){
+  const el = document.getElementById(id);
+  const valEl = valId ? document.getElementById(valId) : null;
+  const update = ()=>{
+    const v = el.type==='range' ? parseFloat(el.value) : el.value;
+    if(valEl) valEl.textContent = fmt(v);
+    onChange(v);
+    draw();
+  };
+  el.addEventListener('input', update);
+  update();
+}
+
+document.getElementById('waveText').addEventListener('input', (e)=>{ waveText = e.target.value; draw(); });
+document.getElementById('waveRepeat').addEventListener('change', (e)=>{ waveRepeat = e.target.checked; draw(); });
+document.getElementById('waveFontFamily').addEventListener('change', (e)=>{ waveFontFamily = e.target.value; draw(); });
+document.getElementById('waveTextColor').addEventListener('input', (e)=>{ waveTextColor = e.target.value; draw(); });
+document.getElementById('waveBold').addEventListener('change', (e)=>{ waveBold = e.target.checked; draw(); });
+document.getElementById('waveColor').addEventListener('input', (e)=>{ waveColor = e.target.value; draw(); });
+
+bindRange('waveFontSize','waveFontSizeVal', v=>v+'px', v=> waveFontSize=v);
+bindRange('waveLetterSpacing','waveLetterSpacingVal', v=>v+'px', v=> waveLetterSpacing=v);
+bindRange('waveAmplitude','waveAmplitudeVal', v=>v+'px', v=> waveAmplitude=v);
+bindRange('waveWavelength','waveWavelengthVal', v=>v+'px', v=> waveWavelength=v);
+bindRange('wavePhase','wavePhaseVal', v=>v+'°', v=> wavePhase=v);
+bindRange('waveBaseline','waveBaselineVal', v=>v+'%', v=> waveBaselinePct=v);
+bindRange('waveThickness', null, v=>v, v=> waveThickness=v);
+
+document.getElementById('waveVisible').addEventListener('change', (e)=>{
+  waveVisible = e.target.checked;
+  document.getElementById('waveStrokeFields').style.display = waveVisible ? '' : 'none';
+  draw();
+});
+
+document.querySelectorAll('.preset-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    waveAmplitude = parseFloat(btn.dataset.amp);
+    waveWavelength = parseFloat(btn.dataset.wl);
+    document.getElementById('waveAmplitude').value = waveAmplitude;
+    document.getElementById('waveAmplitudeVal').textContent = waveAmplitude+'px';
+    document.getElementById('waveWavelength').value = waveWavelength;
+    document.getElementById('waveWavelengthVal').textContent = waveWavelength+'px';
+    draw();
+  });
+});
+
+// ---------- Animation controls wiring ----------
+bindRange('animDuration','animDurationVal', v=>v.toFixed(1)+'s', v=> animDuration=v);
+bindRange('animDelay','animDelayVal', v=>v.toFixed(1)+'s', v=> animDelay=v);
+bindRange('animHold','animHoldVal', v=>v.toFixed(1)+'s', v=> animHold=v);
+document.getElementById('animEasing').addEventListener('change', (e)=>{ animEasing = e.target.value; draw(); });
+document.getElementById('animRotate').addEventListener('change', (e)=>{ animRotate = e.target.checked; draw(); });
+
+document.getElementById('scrub').addEventListener('input', (e)=>{
+  previewPlaying = false;
+  updatePlayButton();
+  const tEnd = animDelay+animDuration+animHold;
+  previewT = (parseFloat(e.target.value)/1000) * tEnd;
+  draw();
+});
+
+function updatePlayButton(){
+  document.getElementById('playBtn').textContent = previewPlaying ? '❚❚' : '▶';
+}
+document.getElementById('playBtn').addEventListener('click', ()=>{
+  const tEnd = animDelay+animDuration+animHold;
+  if(!previewPlaying && previewT >= tEnd - 0.001){ previewT = 0; }
+  previewPlaying = !previewPlaying;
+  if(previewPlaying){
+    previewStartPerf = performance.now();
+    previewStartT = previewT;
+    requestAnimationFrame(previewLoop);
+  }
+  updatePlayButton();
+});
+function previewLoop(now){
+  if(!previewPlaying) return;
+  const tEnd = animDelay+animDuration+animHold;
+  const elapsed = (now - previewStartPerf)/1000;
+  previewT = previewStartT + elapsed;
+  if(previewT >= tEnd){
+    previewT = tEnd;
+    previewPlaying = false;
+    updatePlayButton();
+  }
+  document.getElementById('scrub').value = Math.round((previewT/tEnd)*1000);
+  draw();
+  if(previewPlaying) requestAnimationFrame(previewLoop);
+}
 
 // ---------- Smooth line (rounded corners at every point) ----------
 function drawSmoothLine(ctx, pts, color, width){
@@ -521,10 +841,6 @@ function drawSmoothLine(ctx, pts, color, width){
     ctx.stroke();
     return;
   }
-  // Each interior point becomes the control point of a quadratic curve
-  // ending at the midpoint to the next point — this guarantees a smooth,
-  // rounded arc through every point with no sharp corners, regardless
-  // of how the points are placed.
   for(let i=1; i<pts.length-1; i++){
     const midX = (pts[i].x + pts[i+1].x) / 2;
     const midY = (pts[i].y + pts[i+1].y) / 2;
@@ -534,6 +850,151 @@ function drawSmoothLine(ctx, pts, color, width){
   const secondLast = pts[pts.length-2];
   ctx.quadraticCurveTo(secondLast.x, secondLast.y, last.x, last.y);
   ctx.stroke();
+}
+
+// ---------- Wave path (parametric, arc-length sampled) ----------
+function buildWavePath(){
+  const dx = 4;
+  const N = Math.floor(FULL_W/dx);
+  const amp = waveAmplitude;
+  const wl = Math.max(50, waveWavelength);
+  const phaseRad = wavePhase * Math.PI/180;
+  const baselineY = (waveBaselinePct/100) * FULL_H;
+  const xs = new Float64Array(N+1);
+  const ys = new Float64Array(N+1);
+  const ss = new Float64Array(N+1);
+  for(let i=0;i<=N;i++){
+    const x = i*dx;
+    const y = baselineY + amp*Math.sin((2*Math.PI*x/wl) + phaseRad);
+    xs[i] = x; ys[i] = y;
+    ss[i] = i===0 ? 0 : ss[i-1] + Math.hypot(x-xs[i-1], y-ys[i-1]);
+  }
+  return {xs, ys, ss, totalLength: ss[N], dx, N};
+}
+
+function posAtArcLength(path, s){
+  s = Math.max(0, Math.min(path.totalLength, s));
+  const ss = path.ss;
+  let lo = 0, hi = ss.length-1;
+  while(lo < hi-1){
+    const mid = (lo+hi)>>1;
+    if(ss[mid] <= s) lo = mid; else hi = mid;
+  }
+  const s0=ss[lo], s1=ss[hi];
+  const t = s1>s0 ? (s-s0)/(s1-s0) : 0;
+  const x = path.xs[lo] + (path.xs[hi]-path.xs[lo])*t;
+  const y = path.ys[lo] + (path.ys[hi]-path.ys[lo])*t;
+  const angle = Math.atan2(path.ys[hi]-path.ys[lo], path.xs[hi]-path.xs[lo]);
+  return {x, y, angle};
+}
+
+function arcLengthAtX(path, x){
+  const idx = Math.max(0, Math.min(path.N, Math.round(x/path.dx)));
+  return path.ss[idx];
+}
+
+function buildFontCss(){
+  return (waveBold ? 'bold ' : '') + waveFontSize + 'px ' + waveFontFamily;
+}
+
+function drawTextOnPath(ctx, path, opts){
+  const {text, fontCss, color, letterSpacing, repeat} = opts;
+  if(!text) return;
+  ctx.save();
+  ctx.font = fontCss;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  let s = 0;
+  const maxS = path.totalLength;
+  const src = repeat ? (text + '   ') : text;
+  let i = 0;
+  let guard = 0;
+  while(s < maxS && guard < 8000){
+    guard++;
+    const ch = src[i % src.length];
+    i++;
+    const w = ctx.measureText(ch).width;
+    if(w > 0){
+      const pos = posAtArcLength(path, Math.min(s + w/2, maxS));
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(pos.angle);
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+    }
+    s += w + letterSpacing;
+    if(!repeat && i >= text.length) break;
+  }
+  ctx.restore();
+}
+
+function drawWaveStroke(ctx, path, color, width){
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(path.xs[0], path.ys[0]);
+  for(let i=2;i<=path.N;i+=2){ ctx.lineTo(path.xs[i], path.ys[i]); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function getAnimIcon(){
+  return icons.find(i=>String(i.id)===String(animIconId)) || null;
+}
+
+function easedProgressAt(animT){
+  const dur = Math.max(0.01, animDuration);
+  let u = (animT - animDelay) / dur;
+  u = Math.max(0, Math.min(1, u));
+  return EASINGS[animEasing](u);
+}
+
+// Renders the full scene into ctx (size w x h), shifted left by offsetX.
+// Returns the animated icon's position in ctx-local coordinates (or null).
+function renderSceneAt(ctx, animT, offsetX, w, h, path){
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0,0,w,h);
+  ctx.save();
+  ctx.translate(-offsetX, 0);
+
+  lines.forEach(line=> drawSmoothLine(ctx, line.points, line.color, strokeWidth));
+
+  icons.forEach(icon=>{
+    if(String(icon.id)===String(animIconId)) return;
+    ctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
+  });
+
+  if(waveVisible){
+    drawWaveStroke(ctx, path, waveColor, waveThickness);
+  }
+  if(waveText){
+    drawTextOnPath(ctx, path, {
+      text: waveText, fontCss: buildFontCss(), color: waveTextColor,
+      letterSpacing: waveLetterSpacing, repeat: waveRepeat
+    });
+  }
+
+  let animPos = null;
+  const icon = getAnimIcon();
+  if(icon){
+    const u = easedProgressAt(animT);
+    const s = u * path.totalLength;
+    const pos = posAtArcLength(path, s);
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+    if(animRotate) ctx.rotate(pos.angle);
+    ctx.drawImage(icon.img, -icon.w/2, -icon.h/2, icon.w, icon.h);
+    ctx.restore();
+    animPos = {x: pos.x - offsetX, y: pos.y, w: icon.w, h: icon.h};
+  }
+
+  ctx.restore();
+  return animPos;
 }
 
 // ---------- Draw ----------
@@ -558,24 +1019,14 @@ function drawSlideDividers(ctx){
   ctx.restore();
 }
 
+let lastAnimPos = null;
+
 function draw(){
-  bctx.clearRect(0,0,FULL_W,FULL_H);
-  bctx.fillStyle = bgColor;
-  bctx.fillRect(0,0,FULL_W,FULL_H);
-  lines.forEach(line=> drawSmoothLine(bctx, line.points, line.color, strokeWidth));
-  icons.forEach(icon=>{
-    bctx.save();
-    bctx.beginPath();
-    bctx.roundRect ? bctx.roundRect(icon.x-8, icon.y-8, icon.w+16, icon.h+16, 14) : bctx.rect(icon.x-8, icon.y-8, icon.w+16, icon.h+16);
-    bctx.fillStyle = 'rgba(255,255,255,0.0)';
-    bctx.fill();
-    bctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
-    bctx.restore();
-  });
+  const path = buildWavePath();
+  lastAnimPos = renderSceneAt(bctx, previewT, 0, FULL_W, FULL_H, path);
 
   octx.clearRect(0,0,FULL_W,FULL_H);
   drawSlideDividers(octx);
-  // draw points for active/unfinished lines only
   lines.forEach(line=>{
     if(line.finished) return;
     const isActive = line.id===activeLineId;
@@ -596,14 +1047,22 @@ function draw(){
       }
     });
   });
-  // icon selection outline + resize handle
   icons.forEach(icon=>{
+    const isAnim = String(icon.id)===String(animIconId);
     const isSel = icon.id===selectedIconId;
-    octx.strokeStyle = isSel ? 'rgba(192,91,60,0.7)' : 'rgba(58,43,34,0.25)';
+    let bx = icon.x, by = icon.y, bw = icon.w, bh = icon.h;
+    if(isAnim && lastAnimPos){
+      bx = lastAnimPos.x - lastAnimPos.w/2;
+      by = lastAnimPos.y - lastAnimPos.h/2;
+      bw = lastAnimPos.w; bh = lastAnimPos.h;
+    }
+    octx.strokeStyle = isSel ? 'rgba(192,91,60,0.7)' : (isAnim ? 'rgba(192,91,60,0.35)' : 'rgba(58,43,34,0.25)');
     octx.lineWidth = isSel ? 3 : 2;
-    octx.strokeRect(icon.x, icon.y, icon.w, icon.h);
+    octx.setLineDash(isAnim ? [6,6] : []);
+    octx.strokeRect(bx, by, bw, bh);
+    octx.setLineDash([]);
     if(isSel){
-      const hx = icon.x + icon.w, hy = icon.y + icon.h;
+      const hx = bx + bw, hy = by + bh;
       octx.beginPath();
       octx.arc(hx, hy, 16, 0, Math.PI*2);
       octx.fillStyle = '#C05B3C';
@@ -615,8 +1074,10 @@ function draw(){
   });
 }
 document.getElementById('bgColor').value = bgColor;
+document.getElementById('waveStrokeFields').style.display = waveVisible ? '' : 'none';
 draw();
 renderLineList();
+renderIconList();
 updateModeBanner();
 
 // ---------- Interaction ----------
@@ -644,6 +1105,7 @@ function hitTestPoint(pos){
 function hitTestIcon(pos){
   for(let i=icons.length-1;i>=0;i--){
     const icon = icons[i];
+    if(String(icon.id)===String(animIconId)) continue; // animated icon isn't draggable
     if(pos.x>=icon.x && pos.x<=icon.x+icon.w && pos.y>=icon.y && pos.y<=icon.y+icon.h){
       return icon.id;
     }
@@ -654,7 +1116,13 @@ function hitTestIconHandle(pos){
   if(!selectedIconId) return false;
   const icon = icons.find(i=>i.id===selectedIconId);
   if(!icon) return false;
-  const hx = icon.x + icon.w, hy = icon.y + icon.h;
+  let hx, hy;
+  if(String(icon.id)===String(animIconId) && lastAnimPos){
+    hx = lastAnimPos.x + lastAnimPos.w/2;
+    hy = lastAnimPos.y + lastAnimPos.h/2;
+  } else {
+    hx = icon.x + icon.w; hy = icon.y + icon.h;
+  }
   return Math.hypot(pos.x-hx, pos.y-hy) < 30;
 }
 function sampleColorAt(pos){
@@ -752,7 +1220,7 @@ window.addEventListener('mouseup', ()=>{
 
 window.addEventListener('keydown', (e)=>{
   const tag = (e.target && e.target.tagName) || '';
-  const inField = tag === 'INPUT' || tag === 'TEXTAREA';
+  const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
   if(e.key==='Escape' && pickingColorForLineId){
     pickingColorForLineId = null;
@@ -762,6 +1230,7 @@ window.addEventListener('keydown', (e)=>{
   }
 
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='z'){
+    if(inField) return;
     e.preventDefault();
     undo();
     return;
@@ -792,18 +1261,13 @@ window.addEventListener('keydown', (e)=>{
   }
 });
 
-// ---------- Export ----------
+// ---------- Export: static PNG slides ----------
 document.getElementById('exportBtn').addEventListener('click', ()=>{
-  // redraw clean (without divider labels/handles) to an offscreen canvas
+  const path = buildWavePath();
   const clean = document.createElement('canvas');
   clean.width = FULL_W; clean.height = FULL_H;
   const cctx = clean.getContext('2d');
-  cctx.fillStyle = bgColor;
-  cctx.fillRect(0,0,FULL_W,FULL_H);
-  lines.forEach(line=> drawSmoothLine(cctx, line.points, line.color, strokeWidth));
-  icons.forEach(icon=>{
-    cctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
-  });
+  renderSceneAt(cctx, previewT, 0, FULL_W, FULL_H, path);
 
   for(let i=0;i<N_SLIDES;i++){
     const slice = document.createElement('canvas');
@@ -818,6 +1282,141 @@ document.getElementById('exportBtn').addEventListener('click', ()=>{
       a.click();
       a.remove();
     }, 'image/png');
+  }
+});
+
+// ---------- Export: animated video slides (seamless carousel) ----------
+function invertEasing(pTarget, easingName){
+  const fn = EASINGS[easingName] || EASINGS.linear;
+  const STEPS = 400;
+  let prevU = 0, prevP = fn(0);
+  for(let k=1;k<=STEPS;k++){
+    const u = k/STEPS;
+    const p = fn(u);
+    if(p >= pTarget){
+      const t = (p - prevP) > 0 ? (pTarget - prevP)/(p - prevP) : 0;
+      return prevU + (u - prevU)*t;
+    }
+    prevU = u; prevP = p;
+  }
+  return 1;
+}
+
+function computeEnterTimes(path){
+  const icon = getAnimIcon();
+  const halfW = icon ? icon.w/2 : 0;
+  const times = [0];
+  for(let i=1;i<N_SLIDES;i++){
+    const boundaryX = Math.max(0, i*SLIDE_W - halfW);
+    const sBoundary = arcLengthAtX(path, boundaryX);
+    const pBoundary = path.totalLength>0 ? sBoundary/path.totalLength : 0;
+    const u = invertEasing(pBoundary, animEasing);
+    const t = animDelay + u*animDuration;
+    const tEndAll = animDelay+animDuration+animHold;
+    times.push(Math.max(0, Math.min(t, tEndAll)));
+  }
+  return times;
+}
+
+function pickMimeType(){
+  const options = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  for(const o of options){
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported(o)) return o;
+  }
+  return '';
+}
+
+function downloadBlob(blob, filename){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function recordSlide(index, path, tEnterList, tEndAll){
+  return new Promise((resolve, reject)=>{
+    const rc = document.createElement('canvas');
+    rc.width = SLIDE_W; rc.height = SLIDE_H;
+    const rctx = rc.getContext('2d');
+    const stream = rc.captureStream(30);
+    const mimeType = pickMimeType();
+    let rec;
+    try{
+      rec = mimeType ? new MediaRecorder(stream, {mimeType, videoBitsPerSecond: 8000000})
+                      : new MediaRecorder(stream, {videoBitsPerSecond: 8000000});
+    } catch(err){
+      reject(err);
+      return;
+    }
+    const chunks = [];
+    rec.ondataavailable = (e)=>{ if(e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = ()=>{
+      resolve(new Blob(chunks, {type: mimeType || 'video/webm'}));
+    };
+    rec.onerror = (e)=> reject(e.error || new Error('MediaRecorder fout'));
+
+    const offsetX = index*SLIDE_W;
+    const tEnter = tEnterList[index];
+    let started = false;
+    let recStartPerf = null;
+
+    function frame(){
+      const now = performance.now();
+      if(!started){
+        started = true;
+        recStartPerf = now;
+        rec.start();
+      }
+      const elapsed = (now - recStartPerf)/1000;
+      let animT = tEnter + elapsed;
+      if(animT >= tEndAll){
+        renderSceneAt(rctx, tEndAll, offsetX, SLIDE_W, SLIDE_H, path);
+        setTimeout(()=>{ if(rec.state!=='inactive') rec.stop(); }, 150);
+        return;
+      }
+      renderSceneAt(rctx, animT, offsetX, SLIDE_W, SLIDE_H, path);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('exportStatus');
+  const icon = getAnimIcon();
+  if(!window.MediaRecorder){
+    statusEl.textContent = 'Video-opname wordt niet ondersteund in deze browser. Gebruik Chrome of Edge.';
+    return;
+  }
+  if(!icon){
+    alert('Kies eerst bij "Animatie" welke afbeelding moet meebewegen over de lijn.');
+    return;
+  }
+  const exportBtns = [document.getElementById('exportVideoBtn'), document.getElementById('exportBtn')];
+  exportBtns.forEach(b=> b.disabled = true);
+  const wasPlaying = previewPlaying;
+  previewPlaying = false;
+  updatePlayButton();
+
+  const path = buildWavePath();
+  const tEnterList = computeEnterTimes(path);
+  const tEndAll = animDelay + animDuration + animHold;
+
+  try{
+    for(let i=0;i<N_SLIDES;i++){
+      statusEl.textContent = `Bezig met opnemen: slide ${i+1} van ${N_SLIDES}…`;
+      const blob = await recordSlide(i, path, tEnterList, tEndAll);
+      downloadBlob(blob, `slide-${i+1}.webm`);
+    }
+    statusEl.textContent = `Klaar — ${N_SLIDES} video-slides gedownload (WebM).`;
+  } catch(err){
+    console.error(err);
+    statusEl.textContent = 'Er ging iets mis bij het opnemen: ' + (err && err.message ? err.message : err);
+  } finally {
+    exportBtns.forEach(b=> b.disabled = false);
+    draw();
   }
 });
 </script>
