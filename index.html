@@ -493,7 +493,7 @@
     <div class="row" style="margin-top:10px;">
       <button class="accent" id="exportVideoBtn">Exporteer 4 slides (video)</button>
     </div>
-    <div class="hint">Elke slide-video start precies op het moment dat het icoon links in beeld komt — bij het doorswipen op Instagram lijkt de animatie zo naadloos door te lopen. Output is WebM; stuur de bestanden door als je ze als MP4 nodig hebt.</div>
+    <div class="hint">Elke slide-video start precies op het moment dat het icoon links in beeld komt — bij het doorswipen op Instagram lijkt de animatie zo naadloos door te lopen. Output is WebM (browserbeperking, betrouwbaarder dan MP4-opname). Upload de bestanden opnieuw in de chat als je ze als MP4 nodig hebt.</div>
     <div id="exportStatus"></div>
     <div class="row" style="margin-top:10px;">
       <button class="secondary" id="clearBtn">Alles wissen</button>
@@ -1909,11 +1909,19 @@ function computeEnterTimes(path){
 }
 
 function pickMimeType(){
+  // NOTE: Chrome's MediaRecorder sometimes reports 'video/mp4' as
+  // supported via isTypeSupported() but silently produces empty
+  // files when actually used — tested and confirmed unreliable, so
+  // WebM (which records correctly every time) stays the default.
+  // Upload the WebM files back to Claude any time for an MP4 copy.
   const options = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
   for(const o of options){
     if(window.MediaRecorder && MediaRecorder.isTypeSupported(o)) return o;
   }
   return '';
+}
+function extensionForMime(mimeType){
+  return (mimeType && mimeType.indexOf('mp4') !== -1) ? 'mp4' : 'webm';
 }
 
 function downloadBlob(blob, filename){
@@ -1976,7 +1984,7 @@ function renderCachedFrame(ctx, caches, animT, offsetX, w, h, path){
   ctx.drawImage(caches.above, offsetX, 0, w, h, 0, 0, w, h);
 }
 
-function recordSlide(index, path, tEnterList, tEndAll, caches){
+function recordSlide(index, path, tEnterList, tEndAll, caches, mimeType){
   return new Promise((resolve, reject)=>{
     const rc = document.createElement('canvas');
     rc.width = SLIDE_W; rc.height = SLIDE_H;
@@ -1988,7 +1996,6 @@ function recordSlide(index, path, tEnterList, tEndAll, caches){
     // this render is now just two image blits, so 30fps is easy to
     // sustain.
     const stream = rc.captureStream(30);
-    const mimeType = pickMimeType();
     let rec;
     try{
       rec = mimeType ? new MediaRecorder(stream, {mimeType, videoBitsPerSecond: 8000000})
@@ -2051,14 +2058,16 @@ document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
   const tEnterList = computeEnterTimes(path);
   const tEndAll = animDelay + animDuration + animHold;
   const caches = buildExportCaches(path);
+  const mimeType = pickMimeType();
+  const ext = extensionForMime(mimeType);
 
   try{
     for(let i=0;i<N_SLIDES;i++){
       statusEl.textContent = `Bezig met opnemen: slide ${i+1} van ${N_SLIDES}…`;
-      const blob = await recordSlide(i, path, tEnterList, tEndAll, caches);
-      downloadBlob(blob, `slide-${i+1}.webm`);
+      const blob = await recordSlide(i, path, tEnterList, tEndAll, caches, mimeType);
+      downloadBlob(blob, `slide-${i+1}.${ext}`);
     }
-    statusEl.textContent = `Klaar — ${N_SLIDES} video-slides gedownload (WebM).`;
+    statusEl.textContent = `Klaar — ${N_SLIDES} video-slides gedownload (${ext.toUpperCase()}).`;
   } catch(err){
     console.error(err);
     statusEl.textContent = 'Er ging iets mis bij het opnemen: ' + (err && err.message ? err.message : err);
