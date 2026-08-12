@@ -291,13 +291,20 @@
 
   <section>
     <label>Project</label>
+    <div class="field">
+      <input type="text" id="projectNameInput" placeholder="Naam van dit project…" value="Mijn project">
+    </div>
     <div class="row">
-      <button id="saveProjectBtn">Project opslaan</button>
-      <button class="secondary" id="openProjectBtn">Project openen</button>
+      <button id="saveProjectBtn">Opslaan</button>
+      <button class="secondary" id="updateProjectBtn" style="display:none;">Bijwerken</button>
+    </div>
+    <div id="savedProjectsList" class="line-list" style="margin-top:8px;"></div>
+    <div id="projectStatus" class="hint"></div>
+    <div class="row" style="margin-top:6px;">
+      <button class="secondary" id="exportProjectFileBtn" style="font-size:11.5px; padding:6px 10px;">Downloaden als back-upbestand</button>
     </div>
     <input type="file" id="projectFileInput" accept=".json" style="display:none;">
-    <div id="projectStatus" class="hint"></div>
-    <div class="hint">Slaat alles op (tekst, golf, afbeeldingen, lagen, animatie) in één bestand dat je later weer kan openen om verder te werken.</div>
+    <div class="hint">Projecten worden bewaard in deze browser op dit apparaat — geen bestand nodig. Open dezelfde webpagina later opnieuw om verder te werken.</div>
   </section>
 
   <section>
@@ -497,6 +504,7 @@
     </div>
     <div class="hint">Elke slide-video start precies op het moment dat het icoon links in beeld komt — bij het doorswipen op Instagram lijkt de animatie zo naadloos door te lopen. Exporteert rechtstreeks als MP4 (H.264), zonder haperingen: elke frame krijgt een vaste, berekende plek in de tijd in plaats van live te worden opgenomen.</div>
     <div id="exportStatus"></div>
+    <div id="exportResults" class="line-list" style="margin-top:8px;"></div>
     <div class="row" style="margin-top:10px;">
       <button class="secondary" id="clearBtn">Alles wissen</button>
     </div>
@@ -4068,6 +4076,7 @@ function recordSlideMediaRecorder(index, path, tEnterList, tEndAll, caches, mime
 
 document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('exportStatus');
+  const resultsEl = document.getElementById('exportResults');
   const icon = getAnimIcon();
   if(!window.MediaRecorder && !window.VideoEncoder){
     statusEl.textContent = 'Video-opname wordt niet ondersteund in deze browser. Gebruik Chrome of Edge.';
@@ -4082,6 +4091,7 @@ document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
   const wasPlaying = previewPlaying;
   previewPlaying = false;
   updatePlayButton();
+  resultsEl.innerHTML = '';
 
   const path = buildWavePath();
   const tEnterList = computeEnterTimes(path);
@@ -4089,23 +4099,24 @@ document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
   const caches = buildExportCaches(path);
 
   try{
+    const results = []; // {filename, blob, mimeType}
     const codec = await pickWebCodecsCodec(SLIDE_W, SLIDE_H);
     if(codec){
       for(let i=0;i<N_SLIDES;i++){
         statusEl.textContent = `Bezig met opnemen: slide ${i+1} van ${N_SLIDES} (${codec.label}, MP4)…`;
         const blob = await recordSlideWebCodecs(i, path, tEnterList, tEndAll, caches, codec);
-        downloadBlob(blob, `slide-${i+1}.mp4`);
+        results.push({filename: `slide-${i+1}.mp4`, blob, mimeType: 'video/mp4'});
       }
-      statusEl.textContent = `Klaar — ${N_SLIDES} video-slides gedownload (MP4).`;
     } else {
       const mimeType = pickMimeType();
       for(let i=0;i<N_SLIDES;i++){
         statusEl.textContent = `Bezig met opnemen: slide ${i+1} van ${N_SLIDES} (WebM — MP4 niet beschikbaar in deze browser)…`;
         const blob = await recordSlideMediaRecorder(i, path, tEnterList, tEndAll, caches, mimeType);
-        downloadBlob(blob, `slide-${i+1}.webm`);
+        results.push({filename: `slide-${i+1}.webm`, blob, mimeType: mimeType || 'video/webm'});
       }
-      statusEl.textContent = `Klaar — ${N_SLIDES} video-slides gedownload (WebM, deze browser ondersteunt geen MP4-opname).`;
     }
+    statusEl.textContent = `Klaar — ${N_SLIDES} video-slides klaar hieronder.`;
+    renderExportResults(results);
   } catch(err){
     console.error(err);
     statusEl.textContent = 'Er ging iets mis bij het opnemen: ' + (err && err.message ? err.message : err);
@@ -4114,6 +4125,67 @@ document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
     draw();
   }
 });
+
+// Renders one row per slide with a save/share action, instead of
+// auto-triggering several downloads in a row. On iPhone/iPad, tapping
+// multiple automatic downloads either gets blocked or just lands the
+// files in the Files app, not Camera Roll — the native share sheet
+// (which needs its own direct tap per file) is what actually offers
+// "Save Video" straight to Photos. On desktop this still works exactly
+// like a normal download link, plus a "Download alles" convenience button.
+function renderExportResults(results){
+  const el = document.getElementById('exportResults');
+  el.innerHTML = '';
+  const canShareFiles = !!(navigator.canShare && navigator.share);
+
+  if(results.length > 1){
+    const allRow = document.createElement('div');
+    allRow.className = 'row';
+    allRow.style.marginBottom = '4px';
+    const allBtn = document.createElement('button');
+    allBtn.className = 'secondary';
+    allBtn.style.fontSize = '12px';
+    allBtn.textContent = 'Download alles (desktop)';
+    allBtn.addEventListener('click', ()=>{
+      results.forEach(r=> downloadBlob(r.blob, r.filename));
+    });
+    allRow.appendChild(allBtn);
+    el.appendChild(allRow);
+  }
+
+  results.forEach((r, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'line-item';
+    row.style.cursor = 'default';
+    const label = document.createElement('span');
+    label.style.flex = '1';
+    label.textContent = `Slide ${idx+1} — ${(r.blob.size/1024).toFixed(0)} KB`;
+    row.appendChild(label);
+
+    const btn = document.createElement('button');
+    btn.className = 'secondary';
+    btn.style.fontSize = '12px';
+
+    const file = new File([r.blob], r.filename, {type: r.mimeType});
+    const canShareThis = canShareFiles && (()=>{ try{ return navigator.canShare({files:[file]}); } catch(e){ return false; } })();
+
+    if(canShareThis){
+      btn.textContent = 'Opslaan in Camera rol ▸';
+      btn.addEventListener('click', async ()=>{
+        try{
+          await navigator.share({files:[file]});
+        } catch(err){
+          if(err && err.name !== 'AbortError') console.error(err);
+        }
+      });
+    } else {
+      btn.textContent = 'Downloaden';
+      btn.addEventListener('click', ()=> downloadBlob(r.blob, r.filename));
+    }
+    row.appendChild(btn);
+    el.appendChild(row);
+  });
+}
 
 // ---------- Project save / open ----------
 function serializeProject(){
@@ -4131,16 +4203,6 @@ function serializeProject(){
     layers: layers.map(l=>({type:l.type, id:l.id, visible:l.visible}))
   };
 }
-
-document.getElementById('saveProjectBtn').addEventListener('click', ()=>{
-  const data = serializeProject();
-  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
-  const stamp = new Date().toISOString().slice(0,10);
-  downloadBlob(blob, `kronkellijn-project-${stamp}.json`);
-  const statusEl = document.getElementById('projectStatus');
-  statusEl.textContent = 'Project opgeslagen.';
-  setTimeout(()=>{ if(statusEl.textContent==='Project opgeslagen.') statusEl.textContent=''; }, 4000);
-});
 
 function applyAllUIFromState(){
   document.getElementById('waveText').value = waveText;
@@ -4187,81 +4249,221 @@ function loadIconImage(src){
   });
 }
 
-async function loadProjectFromFile(file){
-  const statusEl = document.getElementById('projectStatus');
-  statusEl.textContent = 'Project laden…';
-  let data;
-  try{
-    data = JSON.parse(await file.text());
-  } catch(err){
-    statusEl.textContent = 'Kon dit bestand niet lezen — is het een opgeslagen project?';
+// Applies a previously-serialized project object (from either the
+// in-browser database or an imported .json backup) to the live state.
+async function applyProjectData(data){
+  const loadedIcons = await Promise.all((data.icons||[]).map(async (iconData)=>{
+    const img = await loadIconImage(iconData.src);
+    return {id: iconData.id, img, x: iconData.x, y: iconData.y, w: iconData.w, h: iconData.h};
+  }));
+
+  waveText = data.waveText ?? waveText;
+  waveRepeat = data.waveRepeat ?? waveRepeat;
+  waveFontFamily = data.waveFontFamily ?? waveFontFamily;
+  waveFontSize = data.waveFontSize ?? waveFontSize;
+  waveBold = data.waveBold ?? waveBold;
+  waveTextColor = data.waveTextColor ?? waveTextColor;
+  waveLetterSpacing = data.waveLetterSpacing ?? waveLetterSpacing;
+  waveAmplitude = data.waveAmplitude ?? waveAmplitude;
+  waveWavelength = data.waveWavelength ?? waveWavelength;
+  wavePhase = data.wavePhase ?? wavePhase;
+  waveBaselinePct = data.waveBaselinePct ?? waveBaselinePct;
+  waveOffsetX = data.waveOffsetX ?? waveOffsetX;
+  waveVisible = data.waveVisible ?? waveVisible;
+  waveColor = data.waveColor ?? waveColor;
+  waveThickness = data.waveThickness ?? waveThickness;
+  bgColor = data.bgColor ?? bgColor;
+  strokeWidth = data.strokeWidth ?? strokeWidth;
+  animIconId = data.animIconId ?? '';
+  animDuration = data.animDuration ?? animDuration;
+  animDelay = data.animDelay ?? animDelay;
+  animHold = data.animHold ?? animHold;
+  animEasing = data.animEasing ?? animEasing;
+  animRotate = data.animRotate ?? animRotate;
+  lineCounter = data.lineCounter ?? lineCounter;
+  iconCounter = data.iconCounter ?? iconCounter;
+
+  lines = (data.lines||[]).map(l=>({id:l.id, color:l.color, finished:l.finished,
+    points: l.points.map(p=>({x:p.x, y:p.y}))}));
+  icons = loadedIcons;
+  layers = (data.layers && data.layers.length) ? data.layers.map(l=>({type:l.type, id:l.id, visible:l.visible}))
+    : [{type:'waveline', visible:true}, {type:'wavetext', visible:true}];
+
+  activeLineId = null; selectedPoint = null; selectedIconId = null;
+  history = [];
+
+  applyAllUIFromState();
+  renderLineList();
+  renderIconList();
+  renderLayerList();
+  syncSelectedIconSizeUI();
+  syncAnimIconSizeUI();
+  updateModeBanner();
+  draw();
+}
+
+// ---------- In-browser storage (IndexedDB) — the primary way to save ----------
+const PROJECT_DB_NAME = 'KronkellijnProjects';
+const PROJECT_STORE = 'projects';
+
+function openProjectDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(PROJECT_DB_NAME, 1);
+    req.onupgradeneeded = ()=>{
+      req.result.createObjectStore(PROJECT_STORE, {keyPath:'name'});
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function dbSaveProject(name, data){
+  const db = await openProjectDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(PROJECT_STORE, 'readwrite');
+    tx.objectStore(PROJECT_STORE).put({name, data, savedAt: Date.now()});
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+async function dbListProjects(){
+  const db = await openProjectDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(PROJECT_STORE, 'readonly');
+    const req = tx.objectStore(PROJECT_STORE).getAll();
+    req.onsuccess = ()=> resolve(req.result.sort((a,b)=> b.savedAt - a.savedAt));
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function dbLoadProject(name){
+  const db = await openProjectDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(PROJECT_STORE, 'readonly');
+    const req = tx.objectStore(PROJECT_STORE).get(name);
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function dbDeleteProject(name){
+  const db = await openProjectDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(PROJECT_STORE, 'readwrite');
+    tx.objectStore(PROJECT_STORE).delete(name);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+function formatSavedAt(ts){
+  const d = new Date(ts);
+  const pad = n=> String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+let currentProjectName = null;
+
+async function renderSavedProjectsList(){
+  const el = document.getElementById('savedProjectsList');
+  let projects = [];
+  try{ projects = await dbListProjects(); } catch(err){ console.error(err); }
+  el.innerHTML = '';
+  if(!projects.length){
+    el.innerHTML = '<div class="hint" style="margin:0;">Nog geen opgeslagen projecten.</div>';
     return;
   }
+  projects.forEach(p=>{
+    const row = document.createElement('div');
+    row.className = 'line-item' + (p.name===currentProjectName ? ' active' : '');
+    row.innerHTML = `
+      <span style="flex:1;">${p.name}</span>
+      <span style="font-size:11px; color:#a08d76;">${formatSavedAt(p.savedAt)}</span>
+      <button class="del" title="Verwijderen" data-name="${p.name}">✕</button>
+    `;
+    row.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('del')) return;
+      loadProjectByName(p.name);
+    });
+    row.querySelector('.del').addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!confirm(`"${p.name}" verwijderen?`)) return;
+      await dbDeleteProject(p.name);
+      renderSavedProjectsList();
+    });
+    el.appendChild(row);
+  });
+}
+
+async function loadProjectByName(name){
+  const statusEl = document.getElementById('projectStatus');
+  statusEl.textContent = 'Project laden…';
   try{
-    const loadedIcons = await Promise.all((data.icons||[]).map(async (iconData)=>{
-      const img = await loadIconImage(iconData.src);
-      return {id: iconData.id, img, x: iconData.x, y: iconData.y, w: iconData.w, h: iconData.h};
-    }));
-
-    waveText = data.waveText ?? waveText;
-    waveRepeat = data.waveRepeat ?? waveRepeat;
-    waveFontFamily = data.waveFontFamily ?? waveFontFamily;
-    waveFontSize = data.waveFontSize ?? waveFontSize;
-    waveBold = data.waveBold ?? waveBold;
-    waveTextColor = data.waveTextColor ?? waveTextColor;
-    waveLetterSpacing = data.waveLetterSpacing ?? waveLetterSpacing;
-    waveAmplitude = data.waveAmplitude ?? waveAmplitude;
-    waveWavelength = data.waveWavelength ?? waveWavelength;
-    wavePhase = data.wavePhase ?? wavePhase;
-    waveBaselinePct = data.waveBaselinePct ?? waveBaselinePct;
-    waveOffsetX = data.waveOffsetX ?? waveOffsetX;
-    waveVisible = data.waveVisible ?? waveVisible;
-    waveColor = data.waveColor ?? waveColor;
-    waveThickness = data.waveThickness ?? waveThickness;
-    bgColor = data.bgColor ?? bgColor;
-    strokeWidth = data.strokeWidth ?? strokeWidth;
-    animIconId = data.animIconId ?? '';
-    animDuration = data.animDuration ?? animDuration;
-    animDelay = data.animDelay ?? animDelay;
-    animHold = data.animHold ?? animHold;
-    animEasing = data.animEasing ?? animEasing;
-    animRotate = data.animRotate ?? animRotate;
-    lineCounter = data.lineCounter ?? lineCounter;
-    iconCounter = data.iconCounter ?? iconCounter;
-
-    lines = (data.lines||[]).map(l=>({id:l.id, color:l.color, finished:l.finished,
-      points: l.points.map(p=>({x:p.x, y:p.y}))}));
-    icons = loadedIcons;
-    layers = (data.layers && data.layers.length) ? data.layers.map(l=>({type:l.type, id:l.id, visible:l.visible}))
-      : [{type:'waveline', visible:true}, {type:'wavetext', visible:true}];
-
-    activeLineId = null; selectedPoint = null; selectedIconId = null;
-    history = [];
-
-    applyAllUIFromState();
-    renderLineList();
-    renderIconList();
-    renderLayerList();
-    syncSelectedIconSizeUI();
-    syncAnimIconSizeUI();
-    updateModeBanner();
-    draw();
-    statusEl.textContent = 'Project geladen.';
-    setTimeout(()=>{ if(statusEl.textContent==='Project geladen.') statusEl.textContent=''; }, 4000);
+    const record = await dbLoadProject(name);
+    if(!record){ statusEl.textContent = 'Project niet gevonden.'; return; }
+    await applyProjectData(record.data);
+    currentProjectName = name;
+    document.getElementById('projectNameInput').value = name;
+    document.getElementById('updateProjectBtn').style.display = '';
+    renderSavedProjectsList();
+    statusEl.textContent = `"${name}" geladen.`;
+    setTimeout(()=>{ if(statusEl.textContent===`"${name}" geladen.`) statusEl.textContent=''; }, 4000);
   } catch(err){
     console.error(err);
-    statusEl.textContent = 'Er ging iets mis bij het laden van dit project.';
+    statusEl.textContent = 'Er ging iets mis bij het laden.';
   }
 }
 
-document.getElementById('openProjectBtn').addEventListener('click', ()=>{
-  document.getElementById('projectFileInput').click();
+async function saveCurrentProject(name){
+  const statusEl = document.getElementById('projectStatus');
+  if(!name || !name.trim()){
+    statusEl.textContent = 'Geef eerst een naam voor dit project.';
+    return;
+  }
+  name = name.trim();
+  try{
+    await dbSaveProject(name, serializeProject());
+    currentProjectName = name;
+    document.getElementById('updateProjectBtn').style.display = '';
+    renderSavedProjectsList();
+    statusEl.textContent = `"${name}" opgeslagen.`;
+    setTimeout(()=>{ if(statusEl.textContent===`"${name}" opgeslagen.`) statusEl.textContent=''; }, 4000);
+  } catch(err){
+    console.error(err);
+    statusEl.textContent = 'Opslaan is mislukt: ' + (err && err.message ? err.message : err);
+  }
+}
+
+document.getElementById('saveProjectBtn').addEventListener('click', ()=>{
+  saveCurrentProject(document.getElementById('projectNameInput').value);
 });
-document.getElementById('projectFileInput').addEventListener('change', (e)=>{
+document.getElementById('updateProjectBtn').addEventListener('click', ()=>{
+  saveCurrentProject(currentProjectName || document.getElementById('projectNameInput').value);
+});
+
+// Secondary/backup path — still available, but the in-browser database
+// above is now the primary way to save (no file juggling needed).
+document.getElementById('exportProjectFileBtn').addEventListener('click', ()=>{
+  const data = serializeProject();
+  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+  const stamp = new Date().toISOString().slice(0,10);
+  const name = (document.getElementById('projectNameInput').value || 'kronkellijn-project').trim().replace(/[^\w\-]+/g,'-');
+  downloadBlob(blob, `${name}-${stamp}.json`);
+});
+document.getElementById('projectFileInput').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
-  if(file) loadProjectFromFile(file);
   e.target.value = '';
+  if(!file) return;
+  const statusEl = document.getElementById('projectStatus');
+  statusEl.textContent = 'Back-upbestand laden…';
+  try{
+    const data = JSON.parse(await file.text());
+    await applyProjectData(data);
+    statusEl.textContent = 'Back-up geladen — geef het hierboven een naam en druk op Opslaan om het in de browser te bewaren.';
+  } catch(err){
+    console.error(err);
+    statusEl.textContent = 'Kon dit bestand niet lezen — is het een opgeslagen project?';
+  }
 });
+
+renderSavedProjectsList();
 </script>
 </body>
 </html>
