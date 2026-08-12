@@ -982,9 +982,12 @@ function buildWavePath(){
   const xs = new Float64Array(N+1);
   const ys = new Float64Array(N+1);
   const ss = new Float64Array(N+1);
+  // waveOffsetX shifts the wave's x-input, so dragging moves the whole
+  // curve (same shape) left/right as a rigid unit, instead of revealing
+  // a different-looking slice of the underlying periodic sine.
   for(let i=0;i<=N;i++){
     const x = i*dx;
-    const y = baselineY + amp*Math.sin((2*Math.PI*x/wl) + phaseRad);
+    const y = baselineY + amp*Math.sin((2*Math.PI*(x - waveOffsetX)/wl) + phaseRad);
     xs[i] = x; ys[i] = y;
     ss[i] = i===0 ? 0 : ss[i-1] + Math.hypot(x-xs[i-1], y-ys[i-1]);
   }
@@ -1121,7 +1124,7 @@ function renderSceneAt(ctx, animT, offsetX, w, h, path){
   if(waveText){
     drawTextOnPath(ctx, path, {
       text: waveText, fontCss: buildFontCss(), color: waveTextColor,
-      letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: waveOffsetX
+      letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: 0
     });
   }
 
