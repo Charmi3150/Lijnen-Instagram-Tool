@@ -288,6 +288,17 @@
   </div>
 
   <section>
+    <label>Project</label>
+    <div class="row">
+      <button id="saveProjectBtn">Project opslaan</button>
+      <button class="secondary" id="openProjectBtn">Project openen</button>
+    </div>
+    <input type="file" id="projectFileInput" accept=".json" style="display:none;">
+    <div id="projectStatus" class="hint"></div>
+    <div class="hint">Slaat alles op (tekst, golf, afbeeldingen, lagen, animatie) in één bestand dat je later weer kan openen om verder te werken.</div>
+  </section>
+
+  <section>
     <label>Tekst op golvende lijn</label>
     <div class="field">
       <textarea id="waveText" placeholder="Typ hier je tekst…">Les Deux</textarea>
@@ -1192,6 +1203,41 @@ function easedProgressAt(animT){
 
 // Renders the full scene into ctx (size w x h), shifted left by offsetX.
 // Returns the animated icon's position in ctx-local coordinates (or null).
+// Draws a single layer's content (used by both the live renderer and
+// the cached-background export path below).
+function renderLayerContent(ctx, layer, path, animT, offsetX){
+  if(layer.type === 'line'){
+    const line = lines.find(l=>l.id===layer.id);
+    if(line) drawSmoothLine(ctx, line.points, line.color, strokeWidth);
+  } else if(layer.type === 'waveline'){
+    if(waveVisible) drawWaveStroke(ctx, path, waveColor, waveThickness);
+  } else if(layer.type === 'wavetext'){
+    if(waveText){
+      drawTextOnPath(ctx, path, {
+        text: waveText, fontCss: buildFontCss(), color: waveTextColor,
+        letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: 0
+      });
+    }
+  } else if(layer.type === 'icon'){
+    const icon = icons.find(i=>i.id===layer.id);
+    if(!icon) return null;
+    if(String(icon.id)===String(animIconId)){
+      const u = easedProgressAt(animT);
+      const s = u * path.totalLength;
+      const pos = posAtArcLength(path, s);
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      if(animRotate) ctx.rotate(pos.angle);
+      ctx.drawImage(icon.img, -icon.w/2, -icon.h/2, icon.w, icon.h);
+      ctx.restore();
+      return {x: pos.x - offsetX, y: pos.y, w: icon.w, h: icon.h};
+    } else {
+      ctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
+    }
+  }
+  return null;
+}
+
 function renderSceneAt(ctx, animT, offsetX, w, h, path){
   ctx.clearRect(0,0,w,h);
   ctx.fillStyle = bgColor;
@@ -1203,35 +1249,8 @@ function renderSceneAt(ctx, animT, offsetX, w, h, path){
 
   layers.forEach(layer=>{
     if(!layer.visible) return;
-    if(layer.type === 'line'){
-      const line = lines.find(l=>l.id===layer.id);
-      if(line) drawSmoothLine(ctx, line.points, line.color, strokeWidth);
-    } else if(layer.type === 'waveline'){
-      if(waveVisible) drawWaveStroke(ctx, path, waveColor, waveThickness);
-    } else if(layer.type === 'wavetext'){
-      if(waveText){
-        drawTextOnPath(ctx, path, {
-          text: waveText, fontCss: buildFontCss(), color: waveTextColor,
-          letterSpacing: waveLetterSpacing, repeat: waveRepeat, startS: 0
-        });
-      }
-    } else if(layer.type === 'icon'){
-      const icon = icons.find(i=>i.id===layer.id);
-      if(!icon) return;
-      if(String(icon.id)===String(animIconId)){
-        const u = easedProgressAt(animT);
-        const s = u * path.totalLength;
-        const pos = posAtArcLength(path, s);
-        ctx.save();
-        ctx.translate(pos.x, pos.y);
-        if(animRotate) ctx.rotate(pos.angle);
-        ctx.drawImage(icon.img, -icon.w/2, -icon.h/2, icon.w, icon.h);
-        ctx.restore();
-        animPos = {x: pos.x - offsetX, y: pos.y, w: icon.w, h: icon.h};
-      } else {
-        ctx.drawImage(icon.img, icon.x, icon.y, icon.w, icon.h);
-      }
-    }
+    const pos = renderLayerContent(ctx, layer, path, animT, offsetX);
+    if(pos) animPos = pos;
   });
 
   ctx.restore();
@@ -1906,11 +1925,68 @@ function downloadBlob(blob, filename){
   a.remove();
 }
 
-function recordSlide(index, path, tEnterList, tEndAll){
+// ---------- Fast export rendering: cache everything except the
+// moving icon, so each recorded frame only has to draw two images
+// instead of redrawing every character of tiled text. Rebuilding the
+// full text/line layout on every single captured frame was the cause
+// of the stutter in downloaded videos — this makes each frame cheap
+// enough to hit a steady 30fps.
+function buildExportCaches(path){
+  const icon = getAnimIcon();
+  const iconLayerIdx = icon
+    ? layers.findIndex(l=>l.type==='icon' && String(l.id)===String(icon.id))
+    : -1;
+
+  const below = document.createElement('canvas');
+  below.width = FULL_W; below.height = FULL_H;
+  const belowCtx = below.getContext('2d');
+  belowCtx.fillStyle = bgColor;
+  belowCtx.fillRect(0,0,FULL_W,FULL_H);
+
+  const above = document.createElement('canvas');
+  above.width = FULL_W; above.height = FULL_H;
+  const aboveCtx = above.getContext('2d');
+
+  layers.forEach((layer, idx)=>{
+    if(!layer.visible) return;
+    if(iconLayerIdx>=0 && idx===iconLayerIdx) return; // the moving icon itself — drawn fresh each frame
+    const target = (iconLayerIdx<0 || idx<iconLayerIdx) ? belowCtx : aboveCtx;
+    renderLayerContent(target, layer, path, 0, 0);
+  });
+
+  return {below, above, iconLayerIdx};
+}
+
+// Fast per-frame draw for export: blit the two cached layers and
+// draw only the moving icon fresh.
+function renderCachedFrame(ctx, caches, animT, offsetX, w, h, path){
+  ctx.clearRect(0,0,w,h);
+  ctx.drawImage(caches.below, offsetX, 0, w, h, 0, 0, w, h);
+  const icon = getAnimIcon();
+  if(icon && caches.iconLayerIdx>=0){
+    const u = easedProgressAt(animT);
+    const s = u * path.totalLength;
+    const pos = posAtArcLength(path, s);
+    ctx.save();
+    ctx.translate(pos.x - offsetX, pos.y);
+    if(animRotate) ctx.rotate(pos.angle);
+    ctx.drawImage(icon.img, -icon.w/2, -icon.h/2, icon.w, icon.h);
+    ctx.restore();
+  }
+  ctx.drawImage(caches.above, offsetX, 0, w, h, 0, 0, w, h);
+}
+
+function recordSlide(index, path, tEnterList, tEndAll, caches){
   return new Promise((resolve, reject)=>{
     const rc = document.createElement('canvas');
     rc.width = SLIDE_W; rc.height = SLIDE_H;
     const rctx = rc.getContext('2d');
+    // Automatic, browser-driven frame timing (proven/stable) — the
+    // earlier stutter wasn't about how frames were captured, it was
+    // that each frame took too long to RENDER (redrawing every
+    // character of tiled text 30x/sec). With the cached background
+    // this render is now just two image blits, so 30fps is easy to
+    // sustain.
     const stream = rc.captureStream(30);
     const mimeType = pickMimeType();
     let rec;
@@ -1938,16 +2014,16 @@ function recordSlide(index, path, tEnterList, tEndAll){
       if(!started){
         started = true;
         recStartPerf = now;
-        rec.start();
+        rec.start(100); // periodic chunks (not just one at the end) — more robust against any single hiccup
       }
       const elapsed = (now - recStartPerf)/1000;
       let animT = tEnter + elapsed;
       if(animT >= tEndAll){
-        renderSceneAt(rctx, tEndAll, offsetX, SLIDE_W, SLIDE_H, path);
+        renderCachedFrame(rctx, caches, tEndAll, offsetX, SLIDE_W, SLIDE_H, path);
         setTimeout(()=>{ if(rec.state!=='inactive') rec.stop(); }, 150);
         return;
       }
-      renderSceneAt(rctx, animT, offsetX, SLIDE_W, SLIDE_H, path);
+      renderCachedFrame(rctx, caches, animT, offsetX, SLIDE_W, SLIDE_H, path);
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -1974,11 +2050,12 @@ document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
   const path = buildWavePath();
   const tEnterList = computeEnterTimes(path);
   const tEndAll = animDelay + animDuration + animHold;
+  const caches = buildExportCaches(path);
 
   try{
     for(let i=0;i<N_SLIDES;i++){
       statusEl.textContent = `Bezig met opnemen: slide ${i+1} van ${N_SLIDES}…`;
-      const blob = await recordSlide(i, path, tEnterList, tEndAll);
+      const blob = await recordSlide(i, path, tEnterList, tEndAll, caches);
       downloadBlob(blob, `slide-${i+1}.webm`);
     }
     statusEl.textContent = `Klaar — ${N_SLIDES} video-slides gedownload (WebM).`;
@@ -1989,6 +2066,154 @@ document.getElementById('exportVideoBtn').addEventListener('click', async ()=>{
     exportBtns.forEach(b=> b.disabled = false);
     draw();
   }
+});
+
+// ---------- Project save / open ----------
+function serializeProject(){
+  return {
+    version: 1,
+    waveText, waveRepeat, waveFontFamily, waveFontSize, waveBold, waveTextColor,
+    waveLetterSpacing, waveAmplitude, waveWavelength, wavePhase, waveBaselinePct,
+    waveOffsetX, waveVisible, waveColor, waveThickness,
+    bgColor, strokeWidth,
+    animIconId, animDuration, animDelay, animHold, animEasing, animRotate,
+    lineCounter, iconCounter,
+    lines: lines.map(l=>({id:l.id, color:l.color, finished:l.finished,
+      points: l.points.map(p=>({x:p.x, y:p.y}))})),
+    icons: icons.map(i=>({id:i.id, x:i.x, y:i.y, w:i.w, h:i.h, src:i.img.src})),
+    layers: layers.map(l=>({type:l.type, id:l.id, visible:l.visible}))
+  };
+}
+
+document.getElementById('saveProjectBtn').addEventListener('click', ()=>{
+  const data = serializeProject();
+  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+  const stamp = new Date().toISOString().slice(0,10);
+  downloadBlob(blob, `kronkellijn-project-${stamp}.json`);
+  const statusEl = document.getElementById('projectStatus');
+  statusEl.textContent = 'Project opgeslagen.';
+  setTimeout(()=>{ if(statusEl.textContent==='Project opgeslagen.') statusEl.textContent=''; }, 4000);
+});
+
+function applyAllUIFromState(){
+  document.getElementById('waveText').value = waveText;
+  document.getElementById('waveRepeat').checked = waveRepeat;
+  document.getElementById('waveFontFamily').value = waveFontFamily;
+  document.getElementById('waveFontSize').value = waveFontSize;
+  document.getElementById('waveFontSizeVal').textContent = waveFontSize+'px';
+  document.getElementById('waveBold').checked = waveBold;
+  document.getElementById('waveTextColor').value = waveTextColor;
+  document.getElementById('waveLetterSpacing').value = waveLetterSpacing;
+  document.getElementById('waveLetterSpacingVal').textContent = waveLetterSpacing+'px';
+  document.getElementById('waveAmplitude').value = waveAmplitude;
+  document.getElementById('waveAmplitudeVal').textContent = waveAmplitude+'px';
+  document.getElementById('waveWavelength').value = waveWavelength;
+  document.getElementById('waveWavelengthVal').textContent = waveWavelength+'px';
+  document.getElementById('wavePhase').value = wavePhase;
+  document.getElementById('wavePhaseVal').textContent = wavePhase+'°';
+  document.getElementById('waveBaseline').value = waveBaselinePct;
+  document.getElementById('waveBaselineVal').textContent = Math.round(waveBaselinePct)+'%';
+  document.getElementById('waveOffsetX').value = waveOffsetX;
+  document.getElementById('waveOffsetXVal').textContent = Math.round(waveOffsetX)+'px';
+  document.getElementById('waveVisible').checked = waveVisible;
+  document.getElementById('waveStrokeFields').style.display = waveVisible ? '' : 'none';
+  document.getElementById('waveColor').value = waveColor;
+  document.getElementById('waveThickness').value = waveThickness;
+  document.getElementById('bgColor').value = bgColor;
+  document.getElementById('strokeWidth').value = strokeWidth;
+  document.getElementById('animDuration').value = animDuration;
+  document.getElementById('animDurationVal').textContent = animDuration.toFixed(1)+'s';
+  document.getElementById('animDelay').value = animDelay;
+  document.getElementById('animDelayVal').textContent = animDelay.toFixed(1)+'s';
+  document.getElementById('animHold').value = animHold;
+  document.getElementById('animHoldVal').textContent = animHold.toFixed(1)+'s';
+  document.getElementById('animEasing').value = animEasing;
+  document.getElementById('animRotate').checked = animRotate;
+}
+
+function loadIconImage(src){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function loadProjectFromFile(file){
+  const statusEl = document.getElementById('projectStatus');
+  statusEl.textContent = 'Project laden…';
+  let data;
+  try{
+    data = JSON.parse(await file.text());
+  } catch(err){
+    statusEl.textContent = 'Kon dit bestand niet lezen — is het een opgeslagen project?';
+    return;
+  }
+  try{
+    const loadedIcons = await Promise.all((data.icons||[]).map(async (iconData)=>{
+      const img = await loadIconImage(iconData.src);
+      return {id: iconData.id, img, x: iconData.x, y: iconData.y, w: iconData.w, h: iconData.h};
+    }));
+
+    waveText = data.waveText ?? waveText;
+    waveRepeat = data.waveRepeat ?? waveRepeat;
+    waveFontFamily = data.waveFontFamily ?? waveFontFamily;
+    waveFontSize = data.waveFontSize ?? waveFontSize;
+    waveBold = data.waveBold ?? waveBold;
+    waveTextColor = data.waveTextColor ?? waveTextColor;
+    waveLetterSpacing = data.waveLetterSpacing ?? waveLetterSpacing;
+    waveAmplitude = data.waveAmplitude ?? waveAmplitude;
+    waveWavelength = data.waveWavelength ?? waveWavelength;
+    wavePhase = data.wavePhase ?? wavePhase;
+    waveBaselinePct = data.waveBaselinePct ?? waveBaselinePct;
+    waveOffsetX = data.waveOffsetX ?? waveOffsetX;
+    waveVisible = data.waveVisible ?? waveVisible;
+    waveColor = data.waveColor ?? waveColor;
+    waveThickness = data.waveThickness ?? waveThickness;
+    bgColor = data.bgColor ?? bgColor;
+    strokeWidth = data.strokeWidth ?? strokeWidth;
+    animIconId = data.animIconId ?? '';
+    animDuration = data.animDuration ?? animDuration;
+    animDelay = data.animDelay ?? animDelay;
+    animHold = data.animHold ?? animHold;
+    animEasing = data.animEasing ?? animEasing;
+    animRotate = data.animRotate ?? animRotate;
+    lineCounter = data.lineCounter ?? lineCounter;
+    iconCounter = data.iconCounter ?? iconCounter;
+
+    lines = (data.lines||[]).map(l=>({id:l.id, color:l.color, finished:l.finished,
+      points: l.points.map(p=>({x:p.x, y:p.y}))}));
+    icons = loadedIcons;
+    layers = (data.layers && data.layers.length) ? data.layers.map(l=>({type:l.type, id:l.id, visible:l.visible}))
+      : [{type:'waveline', visible:true}, {type:'wavetext', visible:true}];
+
+    activeLineId = null; selectedPoint = null; selectedIconId = null;
+    history = [];
+
+    applyAllUIFromState();
+    renderLineList();
+    renderIconList();
+    renderLayerList();
+    syncSelectedIconSizeUI();
+    syncAnimIconSizeUI();
+    updateModeBanner();
+    draw();
+    statusEl.textContent = 'Project geladen.';
+    setTimeout(()=>{ if(statusEl.textContent==='Project geladen.') statusEl.textContent=''; }, 4000);
+  } catch(err){
+    console.error(err);
+    statusEl.textContent = 'Er ging iets mis bij het laden van dit project.';
+  }
+}
+
+document.getElementById('openProjectBtn').addEventListener('click', ()=>{
+  document.getElementById('projectFileInput').click();
+});
+document.getElementById('projectFileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(file) loadProjectFromFile(file);
+  e.target.value = '';
 });
 </script>
 </body>
