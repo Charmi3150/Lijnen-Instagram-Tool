@@ -346,12 +346,17 @@
       <button type="button" class="preset-btn format-btn" data-w="1080" data-h="608">Liggend (16:9)</button>
     </div>
     <div class="hint">Werkt ook op een al opgebouwd project — alles (tekst, golf, afbeeldingen) schaalt automatisch mee naar het nieuwe formaat, bijvoorbeeld van post naar story.</div>
+    <div class="field" style="margin-top:12px;">
+      <div class="field-label-row"><label>Aantal slides</label><span class="field-val" id="slideCountVal">4</span></div>
+      <input type="range" id="slideCount" min="1" max="10" step="1" value="4">
+    </div>
+    <div class="hint">Meer of minder Instagram-slides om de golf over te verdelen. Bestaande tekst/afbeeldingen blijven op hun plek staan; je krijgt gewoon meer of minder canvasbreedte.</div>
   </section>
 
   <section>
     <label>Tekst op golvende lijn</label>
     <div class="field">
-      <textarea id="waveText" placeholder="Typ hier je tekst…">Les Deux</textarea>
+      <textarea id="waveText" placeholder="Typ hier je tekst…"></textarea>
     </div>
     <div class="check-row">
       <input type="checkbox" id="waveRepeat" checked>
@@ -2538,7 +2543,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 <script>
 // ---------- Config ----------
 let SLIDE_W = 1080, SLIDE_H = 1350;
-const N_SLIDES = 4;
+let N_SLIDES = 4;
 let FULL_W = SLIDE_W * N_SLIDES, FULL_H = SLIDE_H;
 
 const baseCanvas = document.getElementById('baseCanvas');
@@ -2615,7 +2620,7 @@ let lineCounter = 0;
 let iconCounter = 0;
 
 // ---------- Wave / text-on-path state ----------
-let waveText = 'Les Deux';
+let waveText = '';
 let waveRepeat = true;
 let waveFontFamily = "Georgia, 'Iowan Old Style', serif";
 let waveFontSize = 64;
@@ -3164,6 +3169,25 @@ document.querySelectorAll('.format-btn').forEach(btn=>{
   });
 });
 renderFormatButtons();
+
+// ---------- Slide count ----------
+// Just extends/shrinks the total canvas width by whole slide-widths —
+// existing content keeps its absolute position (no rescaling needed,
+// unlike changing the format's width/height).
+function changeSlideCount(newCount){
+  newCount = Math.max(1, Math.min(10, Math.round(newCount)));
+  if(newCount === N_SLIDES) return;
+  N_SLIDES = newCount;
+  FULL_W = SLIDE_W * N_SLIDES;
+  [baseCanvas, overlay].forEach(c=>{ c.width = FULL_W; c.height = FULL_H; });
+  document.getElementById('slideCount').value = N_SLIDES;
+  document.getElementById('slideCountVal').textContent = N_SLIDES;
+  applyResponsiveScale();
+  draw();
+}
+document.getElementById('slideCount').addEventListener('input', (e)=>{
+  changeSlideCount(parseInt(e.target.value));
+});
 
 // ---------- Animation controls wiring ----------
 bindRange('animDuration','animDurationVal', v=>v.toFixed(1)+'s', v=> animDuration=v);
@@ -4628,7 +4652,7 @@ function renderExportResults(results){
 function serializeProject(){
   return {
     version: 1,
-    slideW: SLIDE_W, slideH: SLIDE_H,
+    slideW: SLIDE_W, slideH: SLIDE_H, nSlides: N_SLIDES,
     waveText, waveRepeat, waveFontFamily, waveFontSize, waveBold, waveTextColor,
     waveLetterSpacing, waveAmplitude, waveWavelength, wavePhase, waveBaselinePct,
     waveOffsetX, waveVisible, waveColor, waveThickness,
@@ -4706,9 +4730,12 @@ async function applyProjectData(data){
   // positions were already saved in that format's coordinate space).
   if(data.slideW && data.slideH){
     SLIDE_W = data.slideW; SLIDE_H = data.slideH;
+    N_SLIDES = data.nSlides || N_SLIDES;
     FULL_W = SLIDE_W * N_SLIDES; FULL_H = SLIDE_H;
     [baseCanvas, overlay].forEach(c=>{ c.width = FULL_W; c.height = FULL_H; });
     previewCanvas.width = SLIDE_W; previewCanvas.height = SLIDE_H;
+    document.getElementById('slideCount').value = N_SLIDES;
+    document.getElementById('slideCountVal').textContent = N_SLIDES;
   }
 
   waveText = data.waveText ?? waveText;
