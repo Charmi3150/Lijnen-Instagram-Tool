@@ -161,6 +161,7 @@
     position:absolute;
     top:0; left:0;
     cursor: crosshair;
+    touch-action: none;
   }
   .mode-banner{
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -172,6 +173,34 @@
   }
   .mode-banner b{ color: var(--accent-soft); }
   #fileInput{ display:none; }
+
+  /* ---------- Mobile layout ---------- */
+  @media (max-width: 900px){
+    body{ flex-direction: column; }
+    #main{
+      order: -1;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: var(--paper);
+      padding: 10px 10px 12px;
+      gap: 10px;
+      align-items: center;
+      box-shadow: 0 6px 16px rgba(58,43,34,0.12);
+    }
+    #sidebar{
+      width: 100%;
+      height: auto;
+      position: static;
+      border-right: none;
+      border-top: 1px solid var(--line);
+      padding: 18px 16px 90px;
+    }
+    .mode-banner{ font-size: 12px; text-align:center; }
+    button{ padding: 11px 16px; font-size: 14px; }
+    .layer-item button, .icon-item .del{ padding: 8px 10px; }
+    input[type=range]{ height: 28px; }
+  }
   .icon-list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
   .icon-item{
     display:flex; align-items:center; gap:8px;
@@ -309,6 +338,17 @@
   </section>
 
   <section>
+    <label>Formaat</label>
+    <div class="preset-row">
+      <button type="button" class="preset-btn format-btn" data-w="1080" data-h="1350">Post (4:5)</button>
+      <button type="button" class="preset-btn format-btn" data-w="1080" data-h="1080">Vierkant (1:1)</button>
+      <button type="button" class="preset-btn format-btn" data-w="1080" data-h="1920">Story / Reel (9:16)</button>
+      <button type="button" class="preset-btn format-btn" data-w="1080" data-h="608">Liggend (16:9)</button>
+    </div>
+    <div class="hint">Werkt ook op een al opgebouwd project — alles (tekst, golf, afbeeldingen) schaalt automatisch mee naar het nieuwe formaat, bijvoorbeeld van post naar story.</div>
+  </section>
+
+  <section>
     <label>Tekst op golvende lijn</label>
     <div class="field">
       <textarea id="waveText" placeholder="Typ hier je tekst…">Les Deux</textarea>
@@ -373,6 +413,31 @@
       </div>
     </div>
     <div class="hint">Verschijnt tussen elke herhaling van de tekst langs de lijn (zoals het wolkje-icoontje in het Les Deux-voorbeeld). Alleen zichtbaar als "Herhaal tekst" hierboven aan staat.</div>
+  </section>
+
+  <section>
+    <label>Vormen in de lijn</label>
+    <div class="row">
+      <select id="newPathShapeType" style="flex:1;">
+        <option value="heart">Hartje</option>
+        <option value="circle">Cirkel</option>
+        <option value="loop">Lus</option>
+        <option value="star">Ster</option>
+      </select>
+      <button class="secondary" id="addPathShapeBtn">+ Toevoegen</button>
+    </div>
+    <div class="line-list" id="pathShapeList" style="margin-top:8px;"></div>
+    <div id="selectedPathShapePanel" style="display:none; margin-top:10px;">
+      <div class="field">
+        <div class="field-label-row"><label>Positie op de lijn</label><span class="field-val" id="pathShapePosVal">50%</span></div>
+        <input type="range" id="pathShapePos" min="0" max="100" value="50">
+      </div>
+      <div class="field">
+        <div class="field-label-row"><label>Grootte</label><span class="field-val" id="pathShapeSizeVal">180px</span></div>
+        <input type="range" id="pathShapeSize" min="40" max="500" value="180">
+      </div>
+    </div>
+    <div class="hint">De lijn zelf maakt hier een uitstapje in de gekozen vorm — alles wat al langs de lijn loopt (tekst, de lijnstreek, het animerende icoontje) volgt automatisch mee, zoals in het voorbeeld waar je met je vinger een hartje tekende.</div>
   </section>
 
   <section>
@@ -446,7 +511,7 @@
   <section>
     <label>Lagen</label>
     <div class="layer-list" id="layerList"></div>
-    <div class="hint">Bovenste laag = vooraan. Klik een naam om te selecteren, 👁 om te tonen/verbergen, ▲▼ om de volgorde te wijzigen.</div>
+    <div class="hint">▲▼ wijzigen alleen de <b>volgorde</b> (wat voor/achter ligt) — niet de positie. Klik een naam om die laag te selecteren; op het canvas verschijnt dan een oranje <b>verplaats-handvat</b> in het midden waarmee je 'm kan slepen, ook als een andere afbeelding erover ligt. Met de pijltjestoetsen verschuif je de selectie nauwkeurig (Shift = grotere stap).</div>
   </section>
 
   <section>
@@ -2472,8 +2537,9 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 
 <script>
 // ---------- Config ----------
-const SLIDE_W = 1080, SLIDE_H = 1350, N_SLIDES = 4;
-const FULL_W = SLIDE_W * N_SLIDES, FULL_H = SLIDE_H;
+let SLIDE_W = 1080, SLIDE_H = 1350;
+const N_SLIDES = 4;
+let FULL_W = SLIDE_W * N_SLIDES, FULL_H = SLIDE_H;
 
 const baseCanvas = document.getElementById('baseCanvas');
 const overlay = document.getElementById('overlay');
@@ -2482,9 +2548,17 @@ const overlay = document.getElementById('overlay');
 });
 
 function applyResponsiveScale(){
-  const sidebarWidth = document.getElementById('sidebar').offsetWidth;
-  const available = window.innerWidth - sidebarWidth - 60; // side padding
-  baseScale = Math.min(1, available / FULL_W);
+  const isMobileLayout = window.innerWidth <= 900;
+  let available;
+  if(isMobileLayout){
+    available = window.innerWidth - 24; // canvas area is full-width on mobile, small side padding
+    const availableH = window.innerHeight * 0.5; // leave room to scroll to controls below
+    baseScale = Math.min(1, available / FULL_W, availableH / FULL_H);
+  } else {
+    const sidebarWidth = document.getElementById('sidebar').offsetWidth;
+    available = window.innerWidth - sidebarWidth - 60; // side padding
+    baseScale = Math.min(1, available / FULL_W);
+  }
   updateCanvasDisplaySize();
 }
 let baseScale = 1;
@@ -2551,6 +2625,12 @@ let waveLetterSpacing = 2;
 let shapeType = 'none';
 let shapeSize = 48;
 let shapeColor = '#ffffff';
+// Shapes spliced directly into the path's geometry (a heart/loop the
+// line itself traces), as opposed to shapeType above which is just a
+// small stamp drawn between text repeats.
+let pathShapes = [];
+let shapeCounter = 0;
+let selectedShapeId = null;
 let waveAmplitude = 90;
 let waveWavelength = 850;
 let wavePhase = 0; // degrees
@@ -2754,8 +2834,12 @@ document.getElementById('fileInput').addEventListener('change', (e)=>{
       const aspect = img.width / img.height;
       let w = maxW, h = w / aspect;
       if(h > maxH){ h = maxH; w = h * aspect; }
-      const x = (SLIDE_W - w) / 2;
-      const y = (SLIDE_H - h) / 2;
+      // Cascade each new image slightly so multiple images don't land
+      // perfectly on top of one another (which made the lower one
+      // impossible to reach by clicking on the canvas).
+      const cascade = (icons.length % 6) * 36;
+      const x = (SLIDE_W - w) / 2 + cascade;
+      const y = (SLIDE_H - h) / 2 + cascade;
       icons.push({id: iconCounter, img, x, y, w, h});
       addLayerFor('icon', iconCounter);
       renderIconList();
@@ -2947,7 +3031,76 @@ document.getElementById('shapeColor').addEventListener('input', (e)=>{
 });
 bindRange('shapeSize','shapeSizeVal', v=>Math.round(v)+'px', v=> shapeSize=v);
 
-document.querySelectorAll('.preset-btn').forEach(btn=>{
+// ---------- Shapes spliced into the line's own geometry ----------
+function renderPathShapeList(){
+  const el = document.getElementById('pathShapeList');
+  el.innerHTML = '';
+  const labels = {heart:'Hartje', circle:'Cirkel', loop:'Lus', star:'Ster'};
+  pathShapes.forEach(shape=>{
+    const row = document.createElement('div');
+    row.className = 'line-item' + (shape.id===selectedShapeId ? ' active' : '');
+    row.innerHTML = `<span>${labels[shape.type]||shape.type}</span><button class="del">✕</button>`;
+    row.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('del')) return;
+      selectedShapeId = shape.id;
+      renderPathShapeList();
+      syncSelectedPathShapeUI();
+      draw();
+    });
+    row.querySelector('.del').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      pathShapes = pathShapes.filter(s=>s.id!==shape.id);
+      if(selectedShapeId===shape.id) selectedShapeId = null;
+      renderPathShapeList();
+      syncSelectedPathShapeUI();
+      draw();
+    });
+    el.appendChild(row);
+  });
+  if(!pathShapes.length){
+    el.innerHTML = '<div class="hint" style="margin:0;">Nog geen vormen toegevoegd.</div>';
+  }
+}
+function syncSelectedPathShapeUI(){
+  const panel = document.getElementById('selectedPathShapePanel');
+  const shape = pathShapes.find(s=>s.id===selectedShapeId);
+  if(!shape){ panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const pct = Math.round((shape.insertX/FULL_W)*100);
+  document.getElementById('pathShapePos').value = pct;
+  document.getElementById('pathShapePosVal').textContent = pct+'%';
+  document.getElementById('pathShapeSize').value = shape.size;
+  document.getElementById('pathShapeSizeVal').textContent = Math.round(shape.size)+'px';
+}
+document.getElementById('addPathShapeBtn').addEventListener('click', ()=>{
+  pushHistory();
+  shapeCounter++;
+  const type = document.getElementById('newPathShapeType').value;
+  const shape = {id: shapeCounter, type, insertX: FULL_W*0.5, size: 180};
+  pathShapes.push(shape);
+  selectedShapeId = shape.id;
+  renderPathShapeList();
+  syncSelectedPathShapeUI();
+  draw();
+});
+document.getElementById('pathShapePos').addEventListener('input', (e)=>{
+  const shape = pathShapes.find(s=>s.id===selectedShapeId);
+  if(!shape) return;
+  const pct = parseFloat(e.target.value);
+  shape.insertX = FULL_W * (pct/100);
+  document.getElementById('pathShapePosVal').textContent = Math.round(pct)+'%';
+  draw();
+});
+document.getElementById('pathShapeSize').addEventListener('input', (e)=>{
+  const shape = pathShapes.find(s=>s.id===selectedShapeId);
+  if(!shape) return;
+  shape.size = parseFloat(e.target.value);
+  document.getElementById('pathShapeSizeVal').textContent = Math.round(shape.size)+'px';
+  draw();
+});
+renderPathShapeList();
+
+document.querySelectorAll('.preset-btn[data-amp]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     waveAmplitude = parseFloat(btn.dataset.amp);
     waveWavelength = parseFloat(btn.dataset.wl);
@@ -2958,6 +3111,59 @@ document.querySelectorAll('.preset-btn').forEach(btn=>{
     draw();
   });
 });
+
+// ---------- Format switching ----------
+// Rescales every position/size (icons, lines, wave text/shape, stroke
+// widths) to fit the new slide dimensions, so switching format works
+// just as well on a finished project as on a blank one.
+function changeFormat(newSlideW, newSlideH){
+  if(newSlideW===SLIDE_W && newSlideH===SLIDE_H) return;
+  pushHistory();
+  const scaleX = newSlideW / SLIDE_W;
+  const scaleY = newSlideH / SLIDE_H;
+  const scaleAvg = (scaleX + scaleY) / 2;
+
+  icons.forEach(icon=>{
+    icon.x *= scaleX; icon.y *= scaleY; icon.w *= scaleX; icon.h *= scaleY;
+  });
+  lines.forEach(line=>{
+    line.points.forEach(p=>{ p.x *= scaleX; p.y *= scaleY; });
+  });
+  waveAmplitude *= scaleY;
+  waveWavelength *= scaleX;
+  waveOffsetX *= scaleX;
+  waveFontSize = Math.round(waveFontSize * scaleY);
+  waveLetterSpacing *= scaleX;
+  waveThickness *= scaleAvg;
+  shapeSize = Math.round(shapeSize * scaleAvg);
+  pathShapes.forEach(s=>{ s.insertX *= scaleX; s.size *= scaleAvg; });
+  strokeWidth *= scaleAvg;
+
+  SLIDE_W = newSlideW; SLIDE_H = newSlideH;
+  FULL_W = SLIDE_W * N_SLIDES; FULL_H = SLIDE_H;
+  [baseCanvas, overlay].forEach(c=>{ c.width = FULL_W; c.height = FULL_H; });
+  previewCanvas.width = SLIDE_W; previewCanvas.height = SLIDE_H;
+
+  applyAllUIFromState();
+  applyResponsiveScale();
+  renderFormatButtons();
+  syncSelectedPathShapeUI();
+  draw();
+}
+
+function renderFormatButtons(){
+  document.querySelectorAll('.format-btn').forEach(btn=>{
+    const isActive = parseInt(btn.dataset.w)===SLIDE_W && parseInt(btn.dataset.h)===SLIDE_H;
+    btn.style.borderColor = isActive ? 'var(--accent)' : '';
+    btn.style.color = isActive ? 'var(--accent)' : '';
+  });
+}
+document.querySelectorAll('.format-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    changeFormat(parseInt(btn.dataset.w), parseInt(btn.dataset.h));
+  });
+});
+renderFormatButtons();
 
 // ---------- Animation controls wiring ----------
 bindRange('animDuration','animDurationVal', v=>v.toFixed(1)+'s', v=> animDuration=v);
@@ -3029,6 +3235,58 @@ function drawSmoothLine(ctx, pts, color, width){
 }
 
 // ---------- Wave path (parametric, arc-length sampled) ----------
+// Returns the outline of a shape as points local to its own center
+// (x=0,y=0 is the shape's attachment point — where the line enters
+// and, since these are closed loops, also exits). Sized so the shape
+// is roughly `size` px across.
+function shapeOutlinePoints(type, size){
+  const pts = [];
+  const N = 100;
+  if(type === 'heart'){
+    // Classic parametric heart curve — a closed loop starting and
+    // ending at the same point (t=0 and t=2π coincide), which is
+    // exactly what lets it splice into a path without a gap.
+    for(let i=0;i<=N;i++){
+      const t = (i/N) * Math.PI*2;
+      const hx = 16*Math.pow(Math.sin(t),3);
+      const hy = 13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t);
+      pts.push({x: hx, y: -hy});
+    }
+    const scale = size/34;
+    // shift so the loop's bottom point (the heart's cusp) is the
+    // attachment point at (0,0), matching the reference: line dips
+    // down, loops through the heart, continues from the same spot.
+    const bottom = pts.reduce((m,p)=> p.y>m ? p.y : m, -Infinity);
+    return pts.map(p=>({x: p.x*scale, y: (p.y-bottom)*scale}));
+  }
+  if(type === 'circle'){
+    for(let i=0;i<=N;i++){
+      const t = (i/N) * Math.PI*2;
+      pts.push({x: Math.sin(t)*size/2, y: (1-Math.cos(t))*size/2});
+    }
+    return pts;
+  }
+  if(type === 'star'){
+    const spikes = 5, outerR = size/2, innerR = size*0.2;
+    const total = spikes*2;
+    for(let i=0;i<=total;i++){
+      const idx = i % total;
+      const r = idx%2===0 ? outerR : innerR;
+      const angle = (Math.PI/spikes)*idx - Math.PI/2;
+      pts.push({x: Math.cos(angle)*r, y: Math.sin(angle)*r + outerR});
+    }
+    return pts;
+  }
+  if(type === 'loop'){
+    for(let i=0;i<=N;i++){
+      const t = (i/N) * Math.PI*2;
+      pts.push({x: Math.sin(t)*size/2, y: -Math.cos(t)*size/2 + size/2});
+    }
+    return pts;
+  }
+  return pts;
+}
+
 function buildWavePath(){
   const dx = 4;
   const N = Math.floor(FULL_W/dx);
@@ -3036,9 +3294,6 @@ function buildWavePath(){
   const wl = Math.max(50, waveWavelength);
   const phaseRad = wavePhase * Math.PI/180;
   const baselineY = (waveBaselinePct/100) * FULL_H;
-  const xs = new Float64Array(N+1);
-  const ys = new Float64Array(N+1);
-  const ss = new Float64Array(N+1);
   // Compute the wave's shape in "local" coordinates first (the sine's
   // input is never touched by waveOffsetX), then shift the whole
   // resulting shape sideways by waveOffsetX. That makes dragging a
@@ -3046,14 +3301,36 @@ function buildWavePath(){
   // and (since text/icon always start at the shape's own s=0) it
   // actually carries the text along instead of leaving it pinned at
   // the canvas edge.
+  let xs = [], ys = [];
   for(let i=0;i<=N;i++){
     const localX = i*dx;
     const y = baselineY + amp*Math.sin((2*Math.PI*localX/wl) + phaseRad);
-    xs[i] = localX + waveOffsetX;
-    ys[i] = y;
-    ss[i] = i===0 ? 0 : ss[i-1] + Math.hypot(xs[i]-xs[i-1], y-ys[i-1]);
+    xs.push(localX);
+    ys.push(y);
   }
-  return {xs, ys, ss, totalLength: ss[N], dx, N, offsetX: waveOffsetX};
+
+  // Splice in each inserted shape: at its position, detour off into
+  // the shape's outline and back — everything that already draws
+  // along the path (text, stroke, the animating icon) automatically
+  // traces through it, no separate rendering needed.
+  pathShapes.slice().sort((a,b)=>a.insertX-b.insertX).forEach(shape=>{
+    const outline = shapeOutlinePoints(shape.type, shape.size);
+    if(!outline.length) return;
+    let idx = Math.max(0, Math.min(xs.length-1, Math.round(shape.insertX/dx)));
+    const attachX = xs[idx], attachY = ys[idx];
+    const insertXs = outline.map(p=> attachX + p.x);
+    const insertYs = outline.map(p=> attachY + p.y);
+    xs.splice(idx+1, 0, ...insertXs);
+    ys.splice(idx+1, 0, ...insertYs);
+  });
+
+  const ss = [0];
+  for(let i=1;i<xs.length;i++){
+    ss.push(ss[i-1] + Math.hypot(xs[i]-xs[i-1], ys[i]-ys[i-1]));
+  }
+  const xsShifted = xs.map(x=> x + waveOffsetX);
+
+  return {xs: xsShifted, ys, ss, totalLength: ss[ss.length-1], dx, N: xs.length-1, offsetX: waveOffsetX};
 }
 
 function posAtArcLength(path, s){
@@ -3073,10 +3350,19 @@ function posAtArcLength(path, s){
 }
 
 function arcLengthAtX(path, x){
-  // xs[i] = i*dx + offsetX, so invert that to find the sample index.
-  const localX = x - (path.offsetX || 0);
-  const idx = Math.max(0, Math.min(path.N, Math.round(localX/path.dx)));
-  return path.ss[idx];
+  // Inserted shapes can make the path loop back in x, so this can no
+  // longer assume xs[i] increases in lockstep with i — scan for the
+  // first left-to-right crossing instead (that's also the semantically
+  // right answer for "when does the icon first reach this slide edge").
+  const xs = path.xs;
+  for(let i=1;i<xs.length;i++){
+    const a = xs[i-1], b = xs[i];
+    if((a<=x && b>=x) || (a>=x && b<=x)){
+      const t = b===a ? 0 : (x-a)/(b-a);
+      return path.ss[i-1] + (path.ss[i]-path.ss[i-1])*t;
+    }
+  }
+  return x <= xs[0] ? 0 : path.totalLength;
 }
 
 // Like posAtArcLength, but extrapolates in a straight line past the
@@ -3435,6 +3721,30 @@ function draw(){
       octx.lineWidth = 4;
       octx.strokeStyle = '#fff';
       octx.stroke();
+      if(!isAnim){
+        // Move handle at the center — always grabs THIS layer, even
+        // when another one is stacked on top of it at this spot.
+        const cx = bx + bw/2, cy = by + bh/2;
+        octx.beginPath();
+        octx.arc(cx, cy, 20, 0, Math.PI*2);
+        octx.fillStyle = 'rgba(192,91,60,0.92)';
+        octx.fill();
+        octx.lineWidth = 3;
+        octx.strokeStyle = '#fff';
+        octx.stroke();
+        octx.save();
+        octx.strokeStyle = '#fff';
+        octx.lineWidth = 2.5;
+        octx.lineCap = 'round';
+        const s = 8;
+        [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{
+          octx.beginPath();
+          octx.moveTo(cx, cy);
+          octx.lineTo(cx+dx*s, cy+dy*s);
+          octx.stroke();
+        });
+        octx.restore();
+      }
     }
   });
 
@@ -3531,7 +3841,21 @@ function hitTestIconHandle(pos){
   } else {
     hx = icon.x + icon.w; hy = icon.y + icon.h;
   }
-  return Math.hypot(pos.x-hx, pos.y-hy) < 30;
+  const threshold = 26 / Math.max(0.001, baseScale*zoomFactor);
+  return Math.hypot(pos.x-hx, pos.y-hy) < threshold;
+}
+// A dedicated "move" handle at the selected icon's center. Clicking an
+// icon that's partly or fully covered by another one always grabs
+// whichever is on top — this handle instead always belongs to whatever
+// is currently selected (e.g. via the Layers panel), so a covered
+// layer can still be dragged into view without fighting the one above it.
+function hitTestMoveHandle(pos){
+  if(!selectedIconId) return false;
+  const icon = icons.find(i=>i.id===selectedIconId);
+  if(!icon || String(icon.id)===String(animIconId)) return false;
+  const cx = icon.x + icon.w/2, cy = icon.y + icon.h/2;
+  const threshold = 24 / Math.max(0.001, baseScale*zoomFactor);
+  return Math.hypot(pos.x-cx, pos.y-cy) < threshold;
 }
 // ---------- Magnetic snap guides for dragging icons ----------
 function applyIconSnap(icon, x, y){
@@ -3604,7 +3928,7 @@ function sampleColorAt(pos){
   return '#' + toHex(data[0]) + toHex(data[1]) + toHex(data[2]);
 }
 
-overlay.addEventListener('mousedown', (e)=>{
+overlay.addEventListener('pointerdown', (e)=>{
   const pos = toCanvasCoords(e);
 
   if(pickingColorForLineId){
@@ -3635,6 +3959,13 @@ overlay.addEventListener('mousedown', (e)=>{
     const icon = icons.find(i=>i.id===selectedIconId);
     pushHistory();
     resizingIcon = {id: icon.id, startW: icon.w, startH: icon.h, startPosX: pos.x, aspect: icon.w/icon.h};
+    return;
+  }
+
+  if(hitTestMoveHandle(pos)){
+    const icon = icons.find(i=>i.id===selectedIconId);
+    pushHistory();
+    draggingIcon = {id: icon.id, offX: pos.x-icon.x, offY: pos.y-icon.y};
     return;
   }
 
@@ -3687,7 +4018,7 @@ overlay.addEventListener('mousedown', (e)=>{
   draw();
 });
 
-window.addEventListener('mousemove', (e)=>{
+window.addEventListener('pointermove', (e)=>{
   if(!draggingPoint && !draggingIcon && !resizingIcon && !draggingWave) return;
   const pos = toCanvasCoords(e);
   if(draggingWave){
@@ -3724,7 +4055,7 @@ window.addEventListener('mousemove', (e)=>{
     draw();
   }
 });
-window.addEventListener('mouseup', ()=>{
+window.addEventListener('pointerup', ()=>{
   draggingPoint = null;
   draggingIcon = null;
   resizingIcon = null;
@@ -3783,6 +4114,21 @@ window.addEventListener('keydown', (e)=>{
     renderLineList();
     updateModeBanner();
     draw();
+  }
+
+  // Nudge the selected image with the arrow keys — precise, no
+  // dragging needed. Hold Shift for bigger steps.
+  if(selectedIconId && !inField && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+    const icon = icons.find(i=>i.id===selectedIconId);
+    if(icon && String(icon.id)!==String(animIconId)){
+      e.preventDefault();
+      const step = e.shiftKey ? 20 : 2;
+      if(e.key==='ArrowUp') icon.y -= step;
+      if(e.key==='ArrowDown') icon.y += step;
+      if(e.key==='ArrowLeft') icon.x -= step;
+      if(e.key==='ArrowRight') icon.x += step;
+      draw();
+    }
   }
 });
 
@@ -4282,10 +4628,13 @@ function renderExportResults(results){
 function serializeProject(){
   return {
     version: 1,
+    slideW: SLIDE_W, slideH: SLIDE_H,
     waveText, waveRepeat, waveFontFamily, waveFontSize, waveBold, waveTextColor,
     waveLetterSpacing, waveAmplitude, waveWavelength, wavePhase, waveBaselinePct,
     waveOffsetX, waveVisible, waveColor, waveThickness,
     shapeType, shapeSize, shapeColor,
+    shapeCounter,
+    pathShapes: pathShapes.map(s=>({id:s.id, type:s.type, insertX:s.insertX, size:s.size})),
     bgColor, strokeWidth,
     animIconId, animDuration, animDelay, animHold, animEasing, animRotate,
     lineCounter, iconCounter,
@@ -4353,6 +4702,15 @@ async function applyProjectData(data){
     return {id: iconData.id, img, x: iconData.x, y: iconData.y, w: iconData.w, h: iconData.h};
   }));
 
+  // Restore the saved canvas format directly (no rescaling — these
+  // positions were already saved in that format's coordinate space).
+  if(data.slideW && data.slideH){
+    SLIDE_W = data.slideW; SLIDE_H = data.slideH;
+    FULL_W = SLIDE_W * N_SLIDES; FULL_H = SLIDE_H;
+    [baseCanvas, overlay].forEach(c=>{ c.width = FULL_W; c.height = FULL_H; });
+    previewCanvas.width = SLIDE_W; previewCanvas.height = SLIDE_H;
+  }
+
   waveText = data.waveText ?? waveText;
   waveRepeat = data.waveRepeat ?? waveRepeat;
   waveFontFamily = data.waveFontFamily ?? waveFontFamily;
@@ -4370,6 +4728,9 @@ async function applyProjectData(data){
   shapeType = data.shapeType ?? shapeType;
   shapeSize = data.shapeSize ?? shapeSize;
   shapeColor = data.shapeColor ?? shapeColor;
+  shapeCounter = data.shapeCounter ?? shapeCounter;
+  pathShapes = (data.pathShapes||[]).map(s=>({id:s.id, type:s.type, insertX:s.insertX, size:s.size}));
+  selectedShapeId = null;
   waveThickness = data.waveThickness ?? waveThickness;
   bgColor = data.bgColor ?? bgColor;
   strokeWidth = data.strokeWidth ?? strokeWidth;
@@ -4395,9 +4756,13 @@ async function applyProjectData(data){
   renderLineList();
   renderIconList();
   renderLayerList();
+  renderPathShapeList();
+  syncSelectedPathShapeUI();
   syncSelectedIconSizeUI();
   syncAnimIconSizeUI();
   updateModeBanner();
+  applyResponsiveScale();
+  renderFormatButtons();
   draw();
 }
 
